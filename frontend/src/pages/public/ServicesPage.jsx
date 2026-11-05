@@ -2,167 +2,336 @@ import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { serviceService } from '../../services/serviceService';
 import { formatRupiah } from '../../utils/format';
-import { Search, Clock, Users, ArrowRight, Filter } from 'lucide-react';
+import {
+  Calendar,
+  Users,
+  Search,
+  Filter,
+  Star,
+  Check,
+  DoorOpen,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react';
 
 export default function ServicesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [categories, setCategories] = useState([]);
-  const [services, setServices] = useState([]);
+
+  const today = new Date().toISOString().split('T')[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+  const [checkIn, setCheckIn] = useState(searchParams.get('check_in') || today);
+  const [checkOut, setCheckOut] = useState(searchParams.get('check_out') || tomorrow);
+  const [adults, setAdults] = useState(Number(searchParams.get('adults') || 2));
+  const [children, setChildren] = useState(Number(searchParams.get('children') || 0));
+  const [bedTypeFilter, setBedTypeFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const [roomTypes, setRoomTypes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
-  const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || '');
 
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const res = await serviceService.getCategories();
-        if (res.data) setCategories(res.data);
-      } catch (err) {
-        console.error(err);
+  // Calculate nights
+  const nights = Math.max(
+    1,
+    Math.round(
+      (new Date(checkOut).getTime() - new Date(checkIn).getTime()) /
+        (1000 * 60 * 60 * 24)
+    )
+  );
+
+  const fetchRooms = async () => {
+    setLoading(true);
+    try {
+      const params = {
+        check_in_date: checkIn,
+        check_out_date: checkOut,
+        adults: adults,
+        children: children,
+      };
+      if (bedTypeFilter) params.bed_type = bedTypeFilter;
+      if (searchTerm) params.search = searchTerm;
+
+      const res = await serviceService.getRoomTypes(params);
+      if (res.data) {
+        const list = Array.isArray(res.data)
+          ? res.data
+          : res.data?.room_types || res.data?.data || [];
+        setRoomTypes(list);
       }
-    };
-    fetchCategories();
-  }, []);
-
-  useEffect(() => {
-    const fetchServices = async () => {
-      setLoading(true);
-      try {
-        const params = {};
-        if (selectedCategory) params.category_id = selectedCategory;
-        if (searchTerm) params.search = searchTerm;
-        const res = await serviceService.getServices(params);
-        if (res.data) setServices(res.data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchServices();
-  }, [selectedCategory, searchTerm]);
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchRooms();
+  }, [checkIn, checkOut, adults, children, bedTypeFilter, searchTerm]);
+
+  const safeRoomTypes = Array.isArray(roomTypes)
+    ? roomTypes
+    : roomTypes?.room_types || roomTypes?.data || [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold text-slate-900">Katalog Layanan</h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Temukan dan pilih layanan profesional yang siap dipesan sesuai jadwal fleksibel Anda.
-        </p>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 border-b border-slate-200 pb-6">
+        <div>
+          <span className="text-xs font-bold text-amber-600 uppercase tracking-widest">
+            Koleksi Ruang Menginap
+          </span>
+          <h1 className="text-3xl font-black text-slate-900 mt-1">Daftar Kamar & Villa</h1>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1 max-w-2xl">
+            Pilih dari kamar Deluxe bernuansa tropis hingga Presidential Villa privat tepi pantai dengan kolam renang pribadi.
+          </p>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-2xl text-xs text-amber-800 font-bold flex items-center space-x-2 self-start sm:self-auto">
+          <Sparkles className="w-4 h-4 text-amber-600" />
+          <span>Durasi Menginap: {nights} Malam</span>
+        </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        {/* Category Pills */}
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2 md:pb-0">
-          <button
-            onClick={() => setSelectedCategory('')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
-              selectedCategory === ''
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Semua ({services.length})
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id.toString())}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
-                selectedCategory === cat.id.toString()
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+      {/* Date & Guest Filter Bar */}
+      <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Check-In
+            </label>
+            <div className="relative">
+              <Calendar className="w-4 h-4 text-amber-600 absolute left-3 top-3 pointer-events-none" />
+              <input
+                type="date"
+                min={today}
+                value={checkIn}
+                onChange={(e) => {
+                  setCheckIn(e.target.value);
+                  if (e.target.value >= checkOut) {
+                    const nextD = new Date(e.target.value);
+                    nextD.setDate(nextD.getDate() + 1);
+                    setCheckOut(nextD.toISOString().split('T')[0]);
+                  }
+                }}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Check-Out
+            </label>
+            <div className="relative">
+              <Calendar className="w-4 h-4 text-amber-600 absolute left-3 top-3 pointer-events-none" />
+              <input
+                type="date"
+                min={checkIn}
+                value={checkOut}
+                onChange={(e) => setCheckOut(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Tamu (Dewasa & Anak)
+            </label>
+            <div className="relative">
+              <Users className="w-4 h-4 text-amber-600 absolute left-3 top-3 pointer-events-none" />
+              <select
+                value={`${adults}-${children}`}
+                onChange={(e) => {
+                  const [a, c] = e.target.value.split('-').map(Number);
+                  setAdults(a);
+                  setChildren(c);
+                }}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
+              >
+                <option value="1-0">1 Dewasa</option>
+                <option value="2-0">2 Dewasa</option>
+                <option value="2-1">2 Dewasa, 1 Anak</option>
+                <option value="2-2">2 Dewasa, 2 Anak</option>
+                <option value="3-0">3 Dewasa</option>
+                <option value="4-2">4 Dewasa, 2 Anak</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Tipe Tempat Tidur
+            </label>
+            <select
+              value={bedTypeFilter}
+              onChange={(e) => setBedTypeFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
             >
-              {cat.name}
-            </button>
-          ))}
-        </div>
+              <option value="">Semua Tipe Kasur</option>
+              <option value="King Bed">King Bed</option>
+              <option value="Twin Bed">Twin Bed</option>
+              <option value="Queen Bed">Queen Bed</option>
+              <option value="2 King Beds">2 King Beds</option>
+            </select>
+          </div>
 
-        {/* Search Input */}
-        <form onSubmit={handleSearchSubmit} className="relative min-w-[260px]">
-          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cari layanan..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
-          />
-        </form>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Pencarian
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Nama tipe kamar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Service Grid */}
+      {/* Room Types Listing */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="bg-white rounded-2xl p-6 border border-slate-200 animate-pulse h-64"></div>
-          ))}
+        <div className="py-24 text-center text-slate-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-600 border-t-transparent mx-auto mb-2"></div>
+          Memeriksa ketersediaan unit kamar...
         </div>
-      ) : services.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300">
-          <p className="text-slate-500 text-sm">Tidak ada layanan yang sesuai dengan pencarian Anda.</p>
+      ) : safeRoomTypes.length === 0 ? (
+        <div className="p-16 text-center bg-white rounded-3xl border border-dashed border-slate-300 space-y-4">
+          <DoorOpen className="w-12 h-12 text-slate-400 mx-auto" />
+          <h3 className="font-bold text-slate-800 text-base">Tidak ada kamar tersedia</h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Semua kamar pada rentang tanggal atau kapasitas ini telah terisi. Silakan ubah tanggal check-in/check-out Anda.
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {services.map((service) => (
-            <div
-              key={service.id}
-              className="bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition flex flex-col justify-between overflow-hidden group"
-            >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg">
-                    {service.category?.name || 'Umum'}
-                  </span>
-                  <div className="flex items-center text-xs text-slate-500 space-x-1">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{service.duration_minutes} Menit</span>
+        <div className="space-y-6">
+          {safeRoomTypes.map((room) => {
+            const isAvailable = room.available_count === undefined || room.available_count > 0;
+            const estimatedTotal = (room.base_price_per_night || 0) * nights;
+
+            const safeRoomTypes = Array.isArray(roomTypes)
+    ? roomTypes
+    : roomTypes?.room_types || roomTypes?.data || [];
+
+  return (
+              <div
+                key={room.id}
+                className="bg-white rounded-3xl border border-slate-200/90 overflow-hidden shadow-sm hover:shadow-lg transition flex flex-col lg:flex-row group"
+              >
+                {/* Room Image */}
+                <div className="lg:w-2/5 relative h-64 lg:h-auto bg-slate-900 overflow-hidden">
+                  <img
+                    src={room.image_url}
+                    alt={room.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                    onError={(e) => {
+                      e.target.src =
+                        'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80';
+                    }}
+                  />
+                  <div className="absolute top-4 left-4 bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold text-white flex items-center space-x-1">
+                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    <span>5-Star Comfort</span>
+                  </div>
+                  <div className="absolute bottom-4 left-4 bg-white/95 text-slate-900 text-xs font-bold px-3 py-1 rounded-full shadow">
+                    {room.size_sqm} m²
                   </div>
                 </div>
 
-                <h3 className="font-bold text-lg text-slate-900 group-hover:text-indigo-600 transition">
-                  {service.name}
-                </h3>
+                {/* Room Content */}
+                <div className="p-6 sm:p-8 lg:w-3/5 flex flex-col justify-between space-y-6">
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <h3 className="text-2xl font-black text-slate-900 group-hover:text-amber-600 transition">
+                        {room.name}
+                      </h3>
+                      {room.available_count !== undefined && (
+                        <span
+                          className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                            room.available_count > 0
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}
+                        >
+                          {room.available_count > 0
+                            ? `Tersedia ${room.available_count} Kamar`
+                            : 'Penuh (Sold Out)'}
+                        </span>
+                      )}
+                    </div>
 
-                <p className="text-sm text-slate-500 mt-2 line-clamp-3">
-                  {service.description || 'Layanan berkualitas prima yang siap memberikan pengalaman terbaik untuk Anda.'}
-                </p>
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                      {room.description}
+                    </p>
 
-                <div className="mt-4 flex items-center text-xs text-slate-400 space-x-2">
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Kapasitas: {service.capacity} slot per sesi</span>
+                    {/* Room Attributes */}
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-700">
+                      <span className="bg-slate-100 px-3 py-1.5 rounded-xl font-semibold">
+                        🛏️ {room.bed_type}
+                      </span>
+                      <span className="bg-slate-100 px-3 py-1.5 rounded-xl font-semibold">
+                        👥 Max {room.max_occupancy} Tamu
+                      </span>
+                      <span className="bg-slate-100 px-3 py-1.5 rounded-xl font-semibold">
+                        📐 {room.size_sqm} meter persegi
+                      </span>
+                    </div>
+
+                    {/* Amenities Checklist */}
+                    {room.amenities && room.amenities.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-2">
+                        {room.amenities.map((amenity) => (
+                          <span
+                            key={amenity.id}
+                            className="text-xs text-slate-600 bg-amber-50/70 border border-amber-200/50 px-2.5 py-1 rounded-lg flex items-center space-x-1"
+                          >
+                            <Check className="w-3 h-3 text-amber-600" />
+                            <span>{amenity.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pricing and Book Button */}
+                  <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                    <div>
+                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+                        Harga Kamar / Malam
+                      </div>
+                      <div className="flex items-baseline space-x-2">
+                        <span className="text-2xl font-black text-slate-900">
+                          {formatRupiah(room.base_price_per_night)}
+                        </span>
+                        <span className="text-xs text-slate-400">/ malam</span>
+                      </div>
+                      {nights > 1 && (
+                        <div className="text-xs font-semibold text-amber-700 mt-1">
+                          Estimasi {nights} malam: {formatRupiah(estimatedTotal)} (belum termasuk tax/add-on)
+                        </div>
+                      )}
+                    </div>
+
+                    <Link
+                      to={`/book/${room.id}?check_in=${checkIn}&check_out=${checkOut}&adults=${adults}&children=${children}`}
+                      className="px-6 py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-2xl shadow-md shadow-amber-600/30 transition flex items-center justify-center space-x-2 self-stretch sm:self-auto"
+                    >
+                      <span>Pilih & Pesan Suite</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </div>
                 </div>
               </div>
-
-              <div className="p-6 pt-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-slate-400 block">Tarif</span>
-                  <span className="text-lg font-extrabold text-indigo-600">
-                    {formatRupiah(service.price)}
-                  </span>
-                </div>
-
-                <Link
-                  to={`/book/${service.id}`}
-                  className="inline-flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
-                >
-                  <span>Pesan Sekarang</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
-

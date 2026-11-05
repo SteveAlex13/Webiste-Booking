@@ -1,9 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { adminService } from '../../services/adminService';
-import { formatRupiah, formatDateTime, BOOKING_STATUS_CONFIG } from '../../utils/format';
-import { Search, Filter, Eye, CheckCircle2, AlertCircle, Edit, Calendar } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import { formatRupiah, formatDate, formatDateTime, BOOKING_STATUS_CONFIG } from '../../utils/format';
+import {
+  Search,
+  Filter,
+  Eye,
+  CheckCircle2,
+  AlertCircle,
+  Calendar,
+  LogIn,
+  LogOut,
+  DoorOpen,
+  Hotel,
+  Users,
+  Copy,
+  Check,
+  XCircle,
+} from 'lucide-react';
 
 export default function AdminBookingsPage() {
+  const toast = useToast();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
@@ -11,14 +29,29 @@ export default function AdminBookingsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [copiedId, setCopiedId] = useState(null);
 
-  // Status Change Modal
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState(null);
-  const [newStatus, setNewStatus] = useState('CONFIRMED');
-  const [reason, setReason] = useState('');
-  const [updating, setUpdating] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  // Check-In Modal State
+  const [checkInModalOpen, setCheckInModalOpen] = useState(false);
+  const [selectedBookingForCheckIn, setSelectedBookingForCheckIn] = useState(null);
+  const [availableRooms, setAvailableRooms] = useState([]);
+  const [selectedRoomId, setSelectedRoomId] = useState('');
+  const [checkingIn, setCheckingIn] = useState(false);
+
+  // Check-Out Modal State
+  const [checkOutModalOpen, setCheckOutModalOpen] = useState(false);
+  const [selectedBookingForCheckOut, setSelectedBookingForCheckOut] = useState(null);
+  const [checkingOut, setCheckingOut] = useState(false);
+
+  // Cancel Modal State
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [selectedBookingForCancel, setSelectedBookingForCancel] = useState(null);
+  const [cancelReason, setCancelReason] = useState('Pembatalan oleh Front Desk');
+  const [cancelling, setCancelling] = useState(false);
+
+  // Detail Modal State
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [viewingBooking, setViewingBooking] = useState(null);
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -34,7 +67,7 @@ export default function AdminBookingsPage() {
         setTotalPages(res.data.last_page || 1);
       }
     } catch (err) {
-      console.error(err);
+      toast.error('Gagal memuat daftar reservasi hotel.');
     } finally {
       setLoading(false);
     }
@@ -50,239 +83,504 @@ export default function AdminBookingsPage() {
     fetchBookings();
   };
 
-  const openStatusModal = (booking) => {
-    setSelectedBooking(booking);
-    setNewStatus(booking.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : 'COMPLETED');
-    setReason('');
-    setStatusModalOpen(true);
+  const copyCode = (code, id) => {
+    navigator.clipboard.writeText(code);
+    setCopiedId(id);
+    toast.info(`Kode ${code} disalin.`);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleUpdateStatus = async (e) => {
-    e.preventDefault();
-    setUpdating(true);
-    setMessage({ type: '', text: '' });
+  // Open Check-In Modal
+  const openCheckInModal = async (booking) => {
+    setSelectedBookingForCheckIn(booking);
+    setSelectedRoomId('');
+    setCheckInModalOpen(true);
     try {
-      await adminService.updateBookingStatus(selectedBooking.id, newStatus, reason);
-      setMessage({ type: 'success', text: `Status booking berhasil diubah ke ${newStatus}.` });
-      setStatusModalOpen(false);
+      const res = await adminService.getAvailableRoomsForBooking(booking.id);
+      const rooms = res.data?.available_rooms || [];
+      setAvailableRooms(rooms);
+      if (rooms.length > 0) {
+        setSelectedRoomId(rooms[0].id);
+      }
+    } catch (err) {
+      toast.error('Gagal memuat kamar yang tersedia.');
+    }
+  };
+
+  // Submit Check-In
+  const handleConfirmCheckIn = async (e) => {
+    e.preventDefault();
+    if (!selectedRoomId) {
+      toast.error('Pilih unit kamar untuk tamu terlebih dahulu.');
+      return;
+    }
+    setCheckingIn(true);
+    try {
+      await adminService.checkInGuest(selectedBookingForCheckIn.id, selectedRoomId);
+      toast.success(
+        `Tamu ${selectedBookingForCheckIn.customer_name} berhasil Check-In!`
+      );
+      setCheckInModalOpen(false);
       fetchBookings();
     } catch (err) {
-      setMessage({
-        type: 'error',
-        text: err.response?.data?.message || 'Gagal mengubah status booking.',
-      });
+      toast.error(err.response?.data?.message || 'Gagal melakukan check-in.');
     } finally {
-      setUpdating(false);
+      setCheckingIn(false);
+    }
+  };
+
+  // Open Check-Out Modal
+  const openCheckOutModal = (booking) => {
+    setSelectedBookingForCheckOut(booking);
+    setCheckOutModalOpen(true);
+  };
+
+  // Submit Check-Out
+  const handleConfirmCheckOut = async () => {
+    if (!selectedBookingForCheckOut) return;
+    setCheckingOut(true);
+    try {
+      await adminService.checkOutGuest(selectedBookingForCheckOut.id);
+      toast.success(
+        `Tamu ${selectedBookingForCheckOut.customer_name} berhasil Check-Out. Kamar diubah ke status Pembersihan (Cleaning).`
+      );
+      setCheckOutModalOpen(false);
+      fetchBookings();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Gagal melakukan check-out.');
+    } finally {
+      setCheckingOut(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900">Kelola Semua Reservasi</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Pantau seluruh pesanan masuk, verifikasi status, dan selesaikan janji temu layanan.
-        </p>
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">Front Desk & Reservasi Kamar</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Manajemen operasional reservasi hotel, check-in tamu dengan alokasi nomor unit, dan checkout kamar.
+          </p>
+        </div>
       </div>
 
-      {message.text && (
-        <div
-          className={`p-4 rounded-xl flex items-center space-x-3 text-sm ${
-            message.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
-          }`}
-        >
-          {message.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          )}
-          <span>{message.text}</span>
-        </div>
-      )}
-
-      {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
-        <form onSubmit={handleSearchSubmit} className="flex-1 relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cari kode booking, nama, atau telepon..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-          />
-        </form>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
-          >
-            <option value="">Semua Status</option>
-            <option value="PENDING_PAYMENT">Menunggu Pembayaran</option>
-            <option value="CONFIRMED">Terkonfirmasi</option>
-            <option value="COMPLETED">Selesai</option>
-            <option value="CANCELLED">Dibatalkan</option>
-            <option value="EXPIRED">Expired</option>
-          </select>
-
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => {
-              setDateFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
-          />
-
-          {(statusFilter || dateFilter || search) && (
+      {/* Filter and Search Bar */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        {/* Status Pills */}
+        <div className="flex items-center space-x-2 overflow-x-auto pb-2">
+          {[
+            { key: '', label: 'Semua Status' },
+            { key: 'CONFIRMED', label: 'Terkonfirmasi (Siap Inap)' },
+            { key: 'CHECKED_IN', label: 'Sedang Menginap' },
+            { key: 'CHECKED_OUT', label: 'Checked Out' },
+            { key: 'PENDING_PAYMENT', label: 'Menunggu Bayar' },
+            { key: 'CANCELLED', label: 'Dibatalkan' },
+          ].map((tab) => (
             <button
+              key={tab.key}
               onClick={() => {
-                setStatusFilter('');
-                setDateFilter('');
-                setSearch('');
+                setStatusFilter(tab.key);
                 setPage(1);
               }}
-              className="text-xs text-indigo-600 font-semibold hover:underline"
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                statusFilter === tab.key
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
             >
-              Reset Filter
+              {tab.label}
             </button>
-          )}
+          ))}
+        </div>
+
+        {/* Date & Keyword Search */}
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between pt-2 border-t border-slate-100">
+          <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cari kode booking atau nama tamu..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+            />
+          </form>
+
+          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <span className="text-xs text-slate-500 font-semibold">Filter Tanggal:</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => {
+                setDateFilter(e.target.value);
+                setPage(1);
+              }}
+              className="text-xs px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+            />
+            {dateFilter && (
+              <button
+                onClick={() => setDateFilter('')}
+                className="text-xs text-amber-700 font-bold hover:underline"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="py-12 text-center text-slate-400">Memuat booking...</div>
-        ) : bookings.length === 0 ? (
-          <div className="py-12 text-center text-slate-500 text-sm">Tidak ada booking yang ditemukan.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
+      {/* Bookings Table */}
+      <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-600">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+              <tr>
+                <th className="px-6 py-4">Kode & Tamu</th>
+                <th className="px-6 py-4">Tipe Kamar</th>
+                <th className="px-6 py-4">Periode Inap</th>
+                <th className="px-6 py-4">Unit Kamar</th>
+                <th className="px-6 py-4">Total Biaya</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Aksi Front Desk</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
                 <tr>
-                  <th className="px-6 py-3.5 text-left">Kode</th>
-                  <th className="px-6 py-3.5 text-left">Pelanggan</th>
-                  <th className="px-6 py-3.5 text-left">Layanan</th>
-                  <th className="px-6 py-3.5 text-left">Jadwal Sesi</th>
-                  <th className="px-6 py-3.5 text-left">Total</th>
-                  <th className="px-6 py-3.5 text-left">Status</th>
-                  <th className="px-6 py-3.5 text-right">Aksi</th>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-600 border-t-transparent mx-auto mb-2"></div>
+                    Memuat data reservasi...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {bookings.map((b) => {
-                  const statusCfg = BOOKING_STATUS_CONFIG[b.status] || BOOKING_STATUS_CONFIG.PENDING_PAYMENT;
+              ) : bookings.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                    Tidak ada reservasi ditemukan.
+                  </td>
+                </tr>
+              ) : (
+                bookings.map((b) => {
+                  const cfg = BOOKING_STATUS_CONFIG[b.status] || BOOKING_STATUS_CONFIG.PENDING_PAYMENT;
+                  const isConfirmed = b.status === 'CONFIRMED';
+                  const isCheckedIn = b.status === 'CHECKED_IN';
+
                   return (
-                    <tr key={b.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-6 py-4 font-mono font-bold text-slate-900 whitespace-nowrap">
-                        {b.booking_code}
+                    <tr key={b.id} className="hover:bg-slate-50/80 transition">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-1.5 font-mono font-bold text-slate-900">
+                          <span>{b.booking_code}</span>
+                          <button
+                            onClick={() => copyCode(b.booking_code, b.id)}
+                            className="text-slate-300 hover:text-slate-500"
+                          >
+                            {copiedId === b.id ? (
+                              <Check className="w-3 h-3 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                        <div className="font-semibold text-slate-800 mt-1">{b.customer_name}</div>
+                        <div className="text-[11px] text-slate-400">{b.customer_phone}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-semibold text-slate-800">{b.customer_name}</div>
-                        <div className="text-xs text-slate-400">{b.customer_phone}</div>
+
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-900">{b.room_type?.name || b.service_name}</div>
+                        <div className="text-[11px] text-slate-400">
+                          {b.total_adults} Dewasa{b.total_children > 0 ? `, ${b.total_children} Anak` : ''}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">
-                        {b.service_name}
+
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-800">
+                          {formatDate(b.check_in_date)} — {formatDate(b.check_out_date)}
+                        </div>
+                        <div className="text-[11px] text-amber-700 font-semibold mt-0.5">
+                          {b.total_nights || 1} Malam
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-slate-600 whitespace-nowrap text-xs">
-                        {formatDateTime(b.slot?.start_at)}
+
+                      <td className="px-6 py-4">
+                        {b.room ? (
+                          <span className="font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                            #{b.room.room_number} (Lt. {b.room.floor})
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">Belum dialokasikan</span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 font-extrabold text-slate-900 whitespace-nowrap">
-                        {formatRupiah(b.total_amount)}
+
+                      <td className="px-6 py-4">
+                        <span className="font-black text-slate-900">{formatRupiah(b.total_amount)}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+
+                      <td className="px-6 py-4">
                         <span
-                          className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
+                          className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}
                         >
-                          {statusCfg.label}
+                          {cfg.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right whitespace-nowrap">
+
+                      <td className="px-6 py-4 text-right space-x-1.5 whitespace-nowrap">
+                        {/* Check-In Button */}
+                        {isConfirmed && (
+                          <button
+                            onClick={() => openCheckInModal(b)}
+                            className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[11px] shadow-sm transition"
+                          >
+                            <LogIn className="w-3.5 h-3.5" />
+                            <span>Check-In</span>
+                          </button>
+                        )}
+
+                        {/* Check-Out Button */}
+                        {isCheckedIn && (
+                          <button
+                            onClick={() => openCheckOutModal(b)}
+                            className="inline-flex items-center space-x-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-[11px] shadow-sm transition"
+                          >
+                            <LogOut className="w-3.5 h-3.5" />
+                            <span>Check-Out</span>
+                          </button>
+                        )}
+
+                        {/* View Detail Button */}
                         <button
-                          onClick={() => openStatusModal(b)}
-                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition inline-flex items-center space-x-1"
+                          onClick={() => {
+                            setViewingBooking(b);
+                            setDetailModalOpen(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition inline-block align-middle"
+                          title="Lihat Detail Reservasi"
                         >
-                          <Edit className="w-3 h-3" />
-                          <span>Ubah Status</span>
+                          <Eye className="w-4 h-4" />
                         </button>
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span className="text-slate-500">
+              Halaman {page} dari {totalPages}
+            </span>
+            <div className="flex space-x-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage(page - 1)}
+                className="px-3 py-1.5 bg-slate-100 rounded-lg disabled:opacity-40 font-bold"
+              >
+                Sebelumnya
+              </button>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage(page + 1)}
+                className="px-3 py-1.5 bg-slate-100 rounded-lg disabled:opacity-40 font-bold"
+              >
+                Selanjutnya
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Status Modal */}
-      {statusModalOpen && selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">Ubah Status Reservasi</h3>
-            <p className="text-xs text-slate-500">
-              Booking: <strong className="font-mono text-slate-800">{selectedBooking.booking_code}</strong> ({selectedBooking.customer_name})
-            </p>
-
-            <form onSubmit={handleUpdateStatus} className="space-y-4">
+      {/* Check-In Modal with Physical Room Unit Assignment */}
+      {checkInModalOpen && selectedBookingForCheckIn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Pilih Status Baru
+                <span className="text-[10px] font-mono text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md font-bold">
+                  {selectedBookingForCheckIn.booking_code}
+                </span>
+                <h3 className="text-lg font-black text-slate-900 mt-2">
+                  Check-In Tamu: {selectedBookingForCheckIn.customer_name}
+                </h3>
+              </div>
+              <button
+                onClick={() => setCheckInModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Tipe Suite:</span>
+                <span className="font-bold text-slate-900">{selectedBookingForCheckIn.room_type?.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Durasi Menginap:</span>
+                <span className="font-bold text-slate-900">{selectedBookingForCheckIn.total_nights || 1} Malam</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Periode:</span>
+                <span className="font-semibold text-slate-800">
+                  {formatDate(selectedBookingForCheckIn.check_in_date)} — {formatDate(selectedBookingForCheckIn.check_out_date)}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmCheckIn} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Pilih Unit Kamar Fisik yang Siap (Ready Clean) *
                 </label>
-                <select
-                  value={newStatus}
-                  onChange={(e) => setNewStatus(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
-                >
-                  <option value="CONFIRMED">Terkonfirmasi (Sudah Dibayar/Disetujui)</option>
-                  <option value="COMPLETED">Selesai (Layanan Telah Diberikan)</option>
-                  <option value="CANCELLED">Batalkan (Lepaskan Kapasitas Jadwal)</option>
-                </select>
+                {availableRooms.length === 0 ? (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800">
+                    Tidak ada unit kamar fisik yang berstatus Tersedia (Available) untuk tipe ini saat ini. Silakan periksa modul Inventaris Kamar.
+                  </div>
+                ) : (
+                  <select
+                    value={selectedRoomId}
+                    onChange={(e) => setSelectedRoomId(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  >
+                    {availableRooms.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        Unit Kamar #{r.room_number} — Lantai {r.floor} {r.notes ? `(${r.notes})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Alasan / Catatan Perubahan (Opsional)
-                </label>
-                <textarea
-                  rows={2}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Contoh: Pelanggan telah selesai melakukan perawatan..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-end space-x-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setStatusModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-sm font-semibold"
+                  onClick={() => setCheckInModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={updating}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50"
+                  disabled={checkingIn || availableRooms.length === 0}
+                  className="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 shadow-md transition disabled:opacity-50"
                 >
-                  {updating ? 'Menyimpan...' : 'Perbarui Status'}
+                  {checkingIn ? 'Memproses...' : 'Konfirmasi Check-In Tamu'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Check-Out Confirmation Modal */}
+      <ConfirmModal
+        isOpen={checkOutModalOpen}
+        onClose={() => setCheckOutModalOpen(false)}
+        onConfirm={handleConfirmCheckOut}
+        loading={checkingOut}
+        type="warning"
+        title="Konfirmasi Check-Out Tamu"
+        message={`Tamu ${selectedBookingForCheckOut?.customer_name} akan check-out dari Kamar #${selectedBookingForCheckOut?.room?.room_number || ''}. Status unit kamar akan otomatis dialihkan ke "Pembersihan (Cleaning)" untuk tim housekeeping.`}
+        confirmText="Check-Out Tamu Sekarang"
+        cancelText="Batal"
+      />
+
+      {/* Detailed Booking Modal */}
+      {detailModalOpen && viewingBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-5">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-mono text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md font-bold">
+                  {viewingBooking.booking_code}
+                </span>
+                <h3 className="text-lg font-black text-slate-900 mt-2">
+                  Detail Reservasi Hotel
+                </h3>
+              </div>
+              <button
+                onClick={() => setDetailModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-4 bg-slate-50 rounded-2xl space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Nama Tamu:</span>
+                  <span className="font-bold text-slate-900">{viewingBooking.customer_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Email:</span>
+                  <span className="font-bold text-slate-900">{viewingBooking.customer_email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Telepon:</span>
+                  <span className="font-bold text-slate-900">{viewingBooking.customer_phone || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tipe Suite:</span>
+                  <span className="font-bold text-slate-900">{viewingBooking.room_type?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Check-In:</span>
+                  <span className="font-bold text-slate-900">{formatDate(viewingBooking.check_in_date)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Check-Out:</span>
+                  <span className="font-bold text-slate-900">{formatDate(viewingBooking.check_out_date)}</span>
+                </div>
+                {viewingBooking.room && (
+                  <div className="flex justify-between text-indigo-700 font-bold pt-1 border-t border-slate-200">
+                    <span>Unit Kamar:</span>
+                    <span>#{viewingBooking.room.room_number} (Lt. {viewingBooking.room.floor})</span>
+                  </div>
+                )}
+              </div>
+
+              {viewingBooking.special_requests && (
+                <div className="p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl">
+                  <span className="font-bold text-amber-900 block mb-1">Permintaan Khusus Tamu:</span>
+                  <p className="text-slate-700 italic">"{viewingBooking.special_requests}"</p>
+                </div>
+              )}
+
+              {/* Extra Items */}
+              {viewingBooking.extra_items && viewingBooking.extra_items.length > 0 && (
+                <div className="p-4 border border-slate-100 rounded-2xl space-y-1.5">
+                  <span className="font-bold text-slate-900 block">Layanan Tambahan (Add-Ons):</span>
+                  {viewingBooking.extra_items.map((extra) => (
+                    <div key={extra.id} className="flex justify-between text-[11px] text-slate-600">
+                      <span>• {extra.extra_service?.name || extra.service_name} (x{extra.quantity})</span>
+                      <span className="font-semibold text-slate-900">{formatRupiah(extra.subtotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="p-4 bg-amber-50/50 border border-amber-200/60 rounded-2xl flex justify-between items-center">
+                <span className="font-black text-slate-900">Total Pembayaran:</span>
+                <span className="text-base font-black text-amber-800">{formatRupiah(viewingBooking.total_amount)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setDetailModalOpen(false)}
+                className="px-5 py-2.5 bg-slate-900 text-white font-bold rounded-xl text-xs"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

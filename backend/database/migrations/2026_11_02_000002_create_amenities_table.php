@@ -8,12 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('schedule_exceptions', function (Blueprint $table) {
+        Schema::create('amenities', function (Blueprint $table) {
             $table->id();
-            $table->date('exception_date')->index();
-            $table->time('start_time')->nullable();
-            $table->time('end_time')->nullable();
-            $table->boolean('is_closed')->default(true);
+            $table->string('name', 100);
+            $table->string('icon', 50)->default('Check');
+            $table->string('category', 50)->default('room'); // room, bathroom, entertainment, hotel
             $table->string('description', 255)->nullable();
             $table->timestamps();
         });
@@ -21,7 +20,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('schedule_exceptions');
+        Schema::dropIfExists('amenities');
     }
 };
 

@@ -24,6 +24,7 @@ import CustomerProfilePage from './pages/customer/CustomerProfilePage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage';
 import AdminServicesPage from './pages/admin/AdminServicesPage';
+import AdminRoomsPage from './pages/admin/AdminRoomsPage';
 import AdminSchedulesPage from './pages/admin/AdminSchedulesPage';
 import AdminBookingsPage from './pages/admin/AdminBookingsPage';
 import AdminCustomersPage from './pages/admin/AdminCustomersPage';
@@ -55,6 +56,7 @@ export default function App() {
             {/* Admin Area */}
             <Route path="/admin" element={<AdminLayout />}>
               <Route path="dashboard" element={<AdminDashboardPage />} />
+              <Route path="rooms" element={<AdminRoomsPage />} />
               <Route path="categories" element={<AdminCategoriesPage />} />
               <Route path="services" element={<AdminServicesPage />} />
               <Route path="schedules" element={<AdminSchedulesPage />} />

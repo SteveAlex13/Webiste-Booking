@@ -3,43 +3,63 @@ import { adminService } from '../../services/adminService';
 import { useToast } from '../../contexts/ToastContext';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { formatRupiah } from '../../utils/format';
-import { Plus, Edit2, Trash2, Clock, Users, Layers, Upload } from 'lucide-react';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  BedDouble,
+  Users,
+  Star,
+  Check,
+  DoorOpen,
+  Search,
+} from 'lucide-react';
 
 export default function AdminServicesPage() {
   const toast = useToast();
-  const [services, setServices] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [roomTypes, setRoomTypes] = useState([]);
+  const [amenities, setAmenities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingService, setEditingService] = useState(null);
-  const [formData, setFormData] = useState({
-    category_id: '',
-    name: '',
-    description: '',
-    price: '',
-    duration_minutes: 60,
-    capacity: 1,
-    is_active: true,
-  });
-  const [imageFile, setImageFile] = useState(null);
+  const [editingType, setEditingType] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Form State
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [basePrice, setBasePrice] = useState('');
+  const [weekendPrice, setWeekendPrice] = useState('');
+  const [maxAdults, setMaxAdults] = useState(2);
+  const [maxChildren, setMaxChildren] = useState(1);
+  const [sizeSqm, setSizeSqm] = useState(45);
+  const [bedType, setBedType] = useState('King Bed');
+  const [totalRooms, setTotalRooms] = useState(5);
+  const [isActive, setIsActive] = useState(true);
+  const [selectedAmenities, setSelectedAmenities] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Delete Modal
+  // Delete State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [serviceToDelete, setServiceToDelete] = useState(null);
+  const [typeToDelete, setTypeToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      const [svcRes, catRes] = await Promise.all([
-        adminService.getServices(),
-        adminService.getCategories(),
+      const [typesRes, amenRes] = await Promise.all([
+        adminService.getRoomTypes({ search: searchTerm }),
+        adminService.getAmenities(),
       ]);
-      if (svcRes.data?.data) setServices(svcRes.data.data);
-      if (catRes.data?.data) setCategories(catRes.data.data);
+      if (typesRes.data?.data) {
+        setRoomTypes(typesRes.data.data);
+      } else if (typesRes.data) {
+        setRoomTypes(typesRes.data);
+      }
+      if (amenRes.data) {
+        setAmenities(amenRes.data);
+      }
     } catch (err) {
-      console.error(err);
-      toast.error('Gagal memuat data layanan.');
+      toast.error('Gagal memuat data tipe kamar.');
     } finally {
       setLoading(false);
     }
@@ -47,89 +67,92 @@ export default function AdminServicesPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [searchTerm]);
 
   const openCreateModal = () => {
-    setEditingService(null);
-    setFormData({
-      category_id: categories[0]?.id || '',
-      name: '',
-      description: '',
-      price: '',
-      duration_minutes: 60,
-      capacity: 1,
-      is_active: true,
-    });
-    setImageFile(null);
+    setEditingType(null);
+    setName('');
+    setDescription('');
+    setBasePrice('');
+    setWeekendPrice('');
+    setMaxAdults(2);
+    setMaxChildren(1);
+    setSizeSqm(45);
+    setBedType('King Bed');
+    setTotalRooms(5);
+    setIsActive(true);
+    setSelectedAmenities(amenities.slice(0, 4).map((a) => a.id));
     setIsModalOpen(true);
   };
 
-  const openEditModal = (svc) => {
-    setEditingService(svc);
-    setFormData({
-      category_id: svc.category_id,
-      name: svc.name,
-      description: svc.description || '',
-      price: svc.price,
-      duration_minutes: svc.duration_minutes,
-      capacity: svc.capacity,
-      is_active: svc.is_active,
-    });
-    setImageFile(null);
+  const openEditModal = (item) => {
+    setEditingType(item);
+    setName(item.name);
+    setDescription(item.description || '');
+    setBasePrice(item.base_price_per_night);
+    setWeekendPrice(item.weekend_price_per_night || '');
+    setMaxAdults(item.max_adults);
+    setMaxChildren(item.max_children);
+    setSizeSqm(item.room_size_sqm);
+    setBedType(item.bed_type);
+    setTotalRooms(item.total_rooms);
+    setIsActive(item.is_active);
+    setSelectedAmenities(item.amenities ? item.amenities.map((a) => a.id) : []);
     setIsModalOpen(true);
+  };
+
+  const toggleAmenity = (id) => {
+    setSelectedAmenities((prev) =>
+      prev.includes(id) ? prev.filter((aId) => aId !== id) : [...prev, id]
+    );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-
     try {
-      const data = new FormData();
-      data.append('category_id', formData.category_id);
-      data.append('name', formData.name);
-      data.append('description', formData.description || '');
-      data.append('price', formData.price);
-      data.append('duration_minutes', formData.duration_minutes);
-      data.append('capacity', formData.capacity);
-      data.append('is_active', formData.is_active ? '1' : '0');
-      if (imageFile) {
-        data.append('image', imageFile);
+      const payload = {
+        name,
+        description,
+        base_price_per_night: basePrice,
+        weekend_price_per_night: weekendPrice || null,
+        max_adults: maxAdults,
+        max_children: maxChildren,
+        room_size_sqm: sizeSqm,
+        bed_type: bedType,
+        total_rooms: totalRooms,
+        is_active: isActive,
+        amenities: selectedAmenities,
+      };
+
+      if (editingType) {
+        await adminService.updateRoomType(editingType.id, payload);
+        toast.success(`Tipe Kamar "${name}" berhasil diperbarui!`);
+      } else {
+        await adminService.createRoomType(payload);
+        toast.success(`Tipe Kamar "${name}" berhasil ditambahkan!`);
       }
 
-      if (editingService) {
-        await adminService.updateService(editingService.id, data);
-        toast.success('Layanan berhasil diperbarui.');
-      } else {
-        await adminService.createService(data);
-        toast.success('Layanan baru berhasil ditambahkan.');
-      }
       setIsModalOpen(false);
       fetchData();
     } catch (err) {
-      const errs = err.response?.data?.errors;
-      const msg = errs ? Object.values(errs)[0]?.[0] : err.response?.data?.message;
-      toast.error(msg || 'Gagal menyimpan layanan.');
+      toast.error(err.response?.data?.message || 'Gagal menyimpan tipe kamar.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const openDeleteModal = (svc) => {
-    setServiceToDelete(svc);
-    setDeleteModalOpen(true);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!serviceToDelete) return;
+  const handleDelete = async () => {
+    if (!typeToDelete) return;
     setDeleting(true);
     try {
-      const res = await adminService.deleteService(serviceToDelete.id);
-      toast.success(res.message || 'Layanan berhasil diproses.');
+      await adminService.deleteRoomType(typeToDelete.id);
+      toast.success(`Tipe kamar "${typeToDelete.name}" berhasil dihapus.`);
       setDeleteModalOpen(false);
-      setServiceToDelete(null);
+      setTypeToDelete(null);
       fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Gagal menghapus layanan.');
+      toast.error(err.response?.data?.message || 'Gagal menghapus tipe kamar.');
     } finally {
       setDeleting(false);
     }
@@ -137,254 +160,384 @@ export default function AdminServicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">Kelola Layanan</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Atur durasi waktu, kapasitas per sesi slot, dan tarif resmi tiap layanan.
+          <h1 className="text-2xl font-black text-slate-900">Tipe Kamar & Suite</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Kelola katalog kamar, penetapan tarif malam reguler & weekend, kapasitas tamu, dan fasilitas suite.
           </p>
         </div>
+
         <button
           onClick={openCreateModal}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-sm transition self-start sm:self-auto text-sm"
+          className="inline-flex items-center space-x-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-2xl shadow-md transition self-start sm:self-auto text-xs"
         >
           <Plus className="w-4 h-4" />
-          <span>Tambah Layanan</span>
+          <span>Tambah Tipe Kamar</span>
         </button>
       </div>
 
-      {/* Services Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="py-12 text-center text-slate-400">Memuat layanan...</div>
-        ) : services.length === 0 ? (
-          <div className="py-12 text-center text-slate-500 text-sm">Belum ada layanan yang ditambahkan.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="px-6 py-3.5 text-left">Nama Layanan</th>
-                  <th className="px-6 py-3.5 text-left">Kategori</th>
-                  <th className="px-6 py-3.5 text-left">Durasi</th>
-                  <th className="px-6 py-3.5 text-left">Kapasitas</th>
-                  <th className="px-6 py-3.5 text-left">Harga</th>
-                  <th className="px-6 py-3.5 text-left">Status</th>
-                  <th className="px-6 py-3.5 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {services.map((svc) => (
-                  <tr key={svc.id} className="hover:bg-slate-50/70 transition">
-                    <td className="px-6 py-4 font-bold text-slate-900 whitespace-nowrap">{svc.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700">
-                        {svc.category?.name || '-'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-slate-600">
-                      <span className="flex items-center space-x-1">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{svc.duration_minutes} Menit</span>
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-slate-600">
-                      <span className="flex items-center space-x-1">
-                        <Users className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{svc.capacity} Orang / Sesi</span>
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-extrabold text-indigo-600 whitespace-nowrap">
-                      {formatRupiah(svc.price)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          svc.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {svc.is_active ? 'Aktif' : 'Nonaktif'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right whitespace-nowrap space-x-2">
-                      <button
-                        onClick={() => openEditModal(svc)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openDeleteModal(svc)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                        title="Hapus / Arsipkan"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Cari nama kamar atau kasur..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+          />
+        </div>
+        <span className="text-xs font-semibold text-slate-500 hidden sm:block">
+          Total {roomTypes.length} Tipe Kamar
+        </span>
       </div>
 
-      {/* Confirmation Modal */}
-      <ConfirmModal
-        isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleConfirmDelete}
-        loading={deleting}
-        type="danger"
-        title="Arsipkan / Hapus Layanan?"
-        message={`Apakah Anda yakin ingin memproses layanan "${serviceToDelete?.name}"? Jika layanan memiliki riwayat booking, sistem akan mengarsipkannya secara aman tanpa merusak riwayat transaksi.`}
-        confirmText="Ya, Proses"
-      />
+      {/* Room Types Cards */}
+      {loading ? (
+        <div className="py-20 text-center text-slate-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-600 border-t-transparent mx-auto mb-2"></div>
+          Memuat daftar tipe kamar...
+        </div>
+      ) : roomTypes.length === 0 ? (
+        <div className="p-16 text-center bg-white rounded-3xl border border-dashed border-slate-300 space-y-3">
+          <BedDouble className="w-10 h-10 text-slate-400 mx-auto" />
+          <h3 className="font-bold text-slate-800 text-sm">Belum ada tipe kamar</h3>
+          <p className="text-xs text-slate-400">Silakan tambahkan tipe kamar baru untuk mulai menerima booking.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {roomTypes.map((room) => (
+            <div
+              key={room.id}
+              className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="relative h-44 bg-slate-900 overflow-hidden">
+                  <img
+                    src={room.image_url}
+                    alt={room.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.src =
+                        'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80';
+                    }}
+                  />
+                  <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-white flex items-center space-x-1">
+                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                    <span>{room.bed_type}</span>
+                  </div>
+                  <div className="absolute top-3 right-3 flex items-center space-x-1">
+                    <button
+                      onClick={() => openEditModal(room)}
+                      className="p-1.5 bg-white/90 hover:bg-white text-slate-700 rounded-lg shadow-sm transition"
+                      title="Edit Tipe"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTypeToDelete(room);
+                        setDeleteModalOpen(true);
+                      }}
+                      className="p-1.5 bg-white/90 hover:bg-white text-rose-600 rounded-lg shadow-sm transition"
+                      title="Hapus Tipe"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="absolute bottom-3 left-3 bg-amber-500/90 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                    {room.size_sqm} m²
+                  </div>
+                </div>
 
-      {/* Modal Add / Edit Service */}
+                <div className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-slate-900 text-base">{room.name}</h3>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        room.is_active
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      {room.is_active ? 'Aktif' : 'Nonaktif'}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500 line-clamp-2">{room.description}</p>
+
+                  <div className="flex flex-wrap gap-2 text-[11px] text-slate-600 pt-1">
+                    <span className="bg-slate-100 px-2 py-1 rounded-lg">
+                      👥 Max {room.max_adults} Dws, {room.max_children} Ank
+                    </span>
+                    <span className="bg-slate-100 px-2 py-1 rounded-lg font-mono">
+                      🚪 {room.rooms_count ?? room.total_rooms} Unit Kamar
+                    </span>
+                  </div>
+
+                  {room.amenities && room.amenities.length > 0 && (
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1">
+                      {room.amenities.slice(0, 3).map((a) => (
+                        <span
+                          key={a.id}
+                          className="text-[10px] bg-amber-50 text-amber-800 px-2 py-0.5 rounded font-semibold"
+                        >
+                          ✓ {a.name}
+                        </span>
+                      ))}
+                      {room.amenities.length > 3 && (
+                        <span className="text-[10px] text-slate-400 self-center">
+                          +{room.amenities.length - 3} lagi
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-5 pt-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                    Tarif Reguler
+                  </span>
+                  <span className="text-sm font-black text-slate-900">
+                    {formatRupiah(room.base_price_per_night)}
+                  </span>
+                </div>
+                {room.weekend_price_per_night && (
+                  <div className="text-right">
+                    <span className="text-[10px] text-amber-700 font-bold uppercase block">
+                      Tarif Weekend
+                    </span>
+                    <span className="text-xs font-bold text-amber-900">
+                      {formatRupiah(room.weekend_price_per_night)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
-            <h3 className="text-lg font-bold text-slate-900">
-              {editingService ? 'Edit Layanan' : 'Tambah Layanan Baru'}
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-5">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-black text-slate-900">
+                {editingType ? `Edit Tipe Kamar: ${editingType.name}` : 'Tambah Tipe Kamar Baru'}
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nama Tipe Kamar / Suite *
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Contoh: Deluxe Ocean Suite"
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Tarif Reguler / Malam (Rp) *
+                  </label>
+                  <input
+                    type="number"
+                    value={basePrice}
+                    onChange={(e) => setBasePrice(e.target.value)}
+                    placeholder="1500000"
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Tarif Weekend / Malam (Opsional Rp)
+                  </label>
+                  <input
+                    type="number"
+                    value={weekendPrice}
+                    onChange={(e) => setWeekendPrice(e.target.value)}
+                    placeholder="1800000"
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Tipe Kasur *
+                  </label>
+                  <select
+                    value={bedType}
+                    onChange={(e) => setBedType(e.target.value)}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  >
+                    <option value="King Bed">King Bed</option>
+                    <option value="Twin Bed">Twin Bed</option>
+                    <option value="Queen Bed">Queen Bed</option>
+                    <option value="2 King Beds">2 King Beds</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Ukuran Kamar (m²) *
+                  </label>
+                  <input
+                    type="number"
+                    value={sizeSqm}
+                    onChange={(e) => setSizeSqm(Number(e.target.value))}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Kapasitas Dewasa *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={maxAdults}
+                    onChange={(e) => setMaxAdults(Number(e.target.value))}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Kapasitas Anak *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={maxChildren}
+                    onChange={(e) => setMaxChildren(Number(e.target.value))}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Total Kuota Kamar Fisik (Unit) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={totalRooms}
+                    onChange={(e) => setTotalRooms(Number(e.target.value))}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Deskripsi Suite
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Jelaskan fasilitas, pemandangan, dan interior kamar..."
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Amenities checkboxes */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Kategori
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Fasilitas Kamar (Pilih yang Tersedia)
                 </label>
-                <select
-                  required
-                  value={formData.category_id}
-                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                >
-                  <option value="">Pilih Kategori</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200 max-h-40 overflow-y-auto">
+                  {amenities.map((a) => (
+                    <label
+                      key={a.id}
+                      className="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAmenities.includes(a.id)}
+                        onChange={() => toggleAmenity(a.id)}
+                        className="rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <span>{a.name}</span>
+                    </label>
                   ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Nama Layanan
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Contoh: Signature Haircut"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Harga (IDR)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    placeholder="75000"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Durasi (Menit)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={5}
-                    value={formData.duration_minutes}
-                    onChange={(e) => setFormData({ ...formData, duration_minutes: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Kapasitas Slot
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={formData.capacity}
-                    onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Deskripsi Layanan
-                </label>
-                <textarea
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Deskripsi detail apa saja yang didapat..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Foto Layanan (Opsional)
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setImageFile(e.target.files[0])}
-                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                />
-              </div>
-
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 pt-2">
                 <input
                   type="checkbox"
-                  id="svc_active"
-                  checked={formData.is_active}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                  id="isActiveToggle"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
                 />
-                <label htmlFor="svc_active" className="text-sm font-medium text-slate-700">
-                  Status Aktif (Dapat Dipesan)
+                <label htmlFor="isActiveToggle" className="text-xs font-bold text-slate-700 cursor-pointer">
+                  Tipe kamar aktif dan dapat dipesan oleh tamu di website publik
                 </label>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-sm font-semibold"
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-amber-600 hover:bg-amber-700 shadow-md transition"
                 >
-                  {submitting ? 'Menyimpan...' : 'Simpan Layanan'}
+                  {submitting ? 'Menyimpan...' : 'Simpan Tipe Kamar'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDelete}
+        loading={deleting}
+        type="danger"
+        title="Hapus Tipe Kamar?"
+        message={`Apakah Anda yakin ingin menghapus tipe kamar "${typeToDelete?.name}"? Tindakan ini tidak dapat dibatalkan.`}
+        confirmText="Hapus Tipe Kamar"
+        cancelText="Batal"
+      />
     </div>
   );
 }

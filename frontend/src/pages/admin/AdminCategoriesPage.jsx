@@ -2,93 +2,107 @@ import React, { useEffect, useState } from 'react';
 import { adminService } from '../../services/adminService';
 import { useToast } from '../../contexts/ToastContext';
 import ConfirmModal from '../../components/common/ConfirmModal';
-import { Plus, Edit2, Trash2, FolderTree, Layers, Check } from 'lucide-react';
+import { formatRupiah } from '../../utils/format';
+import { Plus, Edit2, Trash2, Coffee, Check, Sparkles } from 'lucide-react';
 
 export default function AdminCategoriesPage() {
   const toast = useToast();
-  const [categories, setCategories] = useState([]);
+  const [extras, setExtras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [formData, setFormData] = useState({ name: '', description: '', is_active: true });
+  const [editingExtra, setEditingExtra] = useState(null);
+
+  // Form State
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [price, setPrice] = useState('');
+  const [priceType, setPriceType] = useState('per_stay'); // 'per_stay' | 'per_night'
+  const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Delete modal state
+  // Delete State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [categoryToDelete, setCategoryToDelete] = useState(null);
+  const [extraToDelete, setExtraToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const fetchCategories = async () => {
+  const fetchExtras = async () => {
+    setLoading(true);
     try {
-      const res = await adminService.getCategories();
-      if (res.data?.data) {
-        setCategories(res.data.data);
+      const res = await adminService.getExtraServices();
+      if (res.data) {
+        setExtras(res.data);
       }
     } catch (err) {
-      console.error(err);
-      toast.error('Gagal memuat kategori.');
+      toast.error('Gagal memuat daftar layanan tambahan.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCategories();
+    fetchExtras();
   }, []);
 
   const openCreateModal = () => {
-    setEditingCategory(null);
-    setFormData({ name: '', description: '', is_active: true });
+    setEditingExtra(null);
+    setName('');
+    setDescription('');
+    setPrice('');
+    setPriceType('per_stay');
+    setIsActive(true);
     setIsModalOpen(true);
   };
 
-  const openEditModal = (cat) => {
-    setEditingCategory(cat);
-    setFormData({
-      name: cat.name,
-      description: cat.description || '',
-      is_active: cat.is_active,
-    });
+  const openEditModal = (item) => {
+    setEditingExtra(item);
+    setName(item.name);
+    setDescription(item.description || '');
+    setPrice(item.price);
+    setPriceType(item.price_type || 'per_stay');
+    setIsActive(item.is_active);
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-
     try {
-      if (editingCategory) {
-        await adminService.updateCategory(editingCategory.id, formData);
-        toast.success('Kategori berhasil diperbarui.');
+      const payload = {
+        name,
+        description,
+        price,
+        price_type: priceType,
+        is_active: isActive,
+      };
+
+      if (editingExtra) {
+        await adminService.updateExtraService(editingExtra.id, payload);
+        toast.success(`Layanan tambahan "${name}" berhasil diperbarui!`);
       } else {
-        await adminService.createCategory(formData);
-        toast.success('Kategori baru berhasil ditambahkan.');
+        await adminService.createExtraService(payload);
+        toast.success(`Layanan tambahan "${name}" berhasil ditambahkan!`);
       }
+
       setIsModalOpen(false);
-      fetchCategories();
+      fetchExtras();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Gagal menyimpan kategori.');
+      toast.error(err.response?.data?.message || 'Gagal menyimpan layanan tambahan.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const openDeleteModal = (cat) => {
-    setCategoryToDelete(cat);
-    setDeleteModalOpen(true);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!categoryToDelete) return;
+  const handleDelete = async () => {
+    if (!extraToDelete) return;
     setDeleting(true);
     try {
-      const res = await adminService.deleteCategory(categoryToDelete.id);
-      toast.success(res.message || 'Kategori berhasil diproses.');
+      await adminService.deleteExtraService(extraToDelete.id);
+      toast.success(`Layanan tambahan "${extraToDelete.name}" berhasil dihapus.`);
       setDeleteModalOpen(false);
-      setCategoryToDelete(null);
-      fetchCategories();
+      setExtraToDelete(null);
+      fetchExtras();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Gagal menghapus kategori.');
+      toast.error(err.response?.data?.message || 'Gagal menghapus layanan tambahan.');
     } finally {
       setDeleting(false);
     }
@@ -96,164 +110,218 @@ export default function AdminCategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">Kelola Kategori Layanan</h1>
-          <p className="text-sm text-slate-500 mt-1">Klasifikasikan layanan Anda untuk mempermudah navigasi pelanggan.</p>
+          <h1 className="text-2xl font-black text-slate-900">Layanan Tambahan (Add-Ons)</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Kelola add-on hotel seperti Floating Breakfast, Antar Jemput Bandara Alphard, Sunset Luxury Spa, atau Extra Bed.
+          </p>
         </div>
+
         <button
           onClick={openCreateModal}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-sm transition self-start sm:self-auto text-sm"
+          className="inline-flex items-center space-x-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-2xl shadow-md transition self-start sm:self-auto text-xs"
         >
           <Plus className="w-4 h-4" />
-          <span>Tambah Kategori</span>
+          <span>Tambah Layanan Add-On</span>
         </button>
       </div>
 
-      {/* Categories Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="py-12 text-center text-slate-400">Memuat kategori...</div>
-        ) : categories.length === 0 ? (
-          <div className="py-12 text-center text-slate-500 text-sm">Belum ada kategori yang dibuat.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="px-6 py-3.5 text-left">Nama Kategori</th>
-                  <th className="px-6 py-3.5 text-left">Slug</th>
-                  <th className="px-6 py-3.5 text-left">Deskripsi</th>
-                  <th className="px-6 py-3.5 text-left">Jml Layanan</th>
-                  <th className="px-6 py-3.5 text-left">Status</th>
-                  <th className="px-6 py-3.5 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {categories.map((cat) => (
-                  <tr key={cat.id} className="hover:bg-slate-50/70 transition">
-                    <td className="px-6 py-4 font-bold text-slate-900 whitespace-nowrap">{cat.name}</td>
-                    <td className="px-6 py-4 font-mono text-xs text-slate-500 whitespace-nowrap">{cat.slug}</td>
-                    <td className="px-6 py-4 text-slate-500 max-w-xs truncate">{cat.description || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                        {cat.services_count || 0} layanan
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          cat.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {cat.is_active ? 'Aktif' : 'Nonaktif'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right whitespace-nowrap space-x-2">
-                      <button
-                        onClick={() => openEditModal(cat)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openDeleteModal(cat)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                        title="Hapus / Nonaktifkan"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Grid of Extra Services */}
+      {loading ? (
+        <div className="py-20 text-center text-slate-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-600 border-t-transparent mx-auto mb-2"></div>
+          Memuat daftar layanan add-on...
+        </div>
+      ) : extras.length === 0 ? (
+        <div className="p-16 text-center bg-white rounded-3xl border border-dashed border-slate-300 space-y-3">
+          <Coffee className="w-10 h-10 text-slate-400 mx-auto" />
+          <h3 className="font-bold text-slate-800 text-sm">Belum ada layanan add-on</h3>
+          <p className="text-xs text-slate-400">Tambahkan pengalaman tambahan yang dapat dipilih tamu saat reservasi.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {extras.map((extra) => (
+            <div
+              key={extra.id}
+              className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+                    <Coffee className="w-5 h-5" />
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => openEditModal(extra)}
+                      className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition"
+                      title="Edit"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setExtraToDelete(extra);
+                        setDeleteModalOpen(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition"
+                      title="Hapus"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
 
-      {/* Confirmation Modal */}
-      <ConfirmModal
-        isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleConfirmDelete}
-        loading={deleting}
-        type="danger"
-        title="Hapus / Nonaktifkan Kategori?"
-        message={`Apakah Anda yakin ingin memproses kategori "${categoryToDelete?.name}"? Jika terdapat layanan terkait, statusnya akan dinonaktifkan secara aman.`}
-        confirmText="Ya, Proses"
-      />
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-slate-900 text-base">{extra.name}</h3>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      extra.is_active
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    {extra.is_active ? 'Aktif' : 'Nonaktif'}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-500 mt-2 line-clamp-3 leading-relaxed">
+                  {extra.description}
+                </p>
+              </div>
+
+              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-[11px] text-slate-400 font-semibold">
+                  Tipe: {extra.price_type === 'per_stay' ? 'Per Masa Inap' : 'Per Malam'}
+                </span>
+                <span className="text-sm font-black text-amber-700">
+                  {formatRupiah(extra.price)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Modal Add / Edit */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">
-              {editingCategory ? 'Edit Kategori' : 'Tambah Kategori Baru'}
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-black text-slate-900">
+                {editingExtra ? 'Edit Layanan Add-On' : 'Tambah Layanan Add-On'}
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Nama Kategori
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nama Layanan *
                 </label>
                 <input
                   type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Contoh: Floating Breakfast in Pool"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Contoh: Perawatan Wajah"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Deskripsi
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Harga Add-On (Rp) *
+                </label>
+                <input
+                  type="number"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="350000"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Model Perhitungan Tarif *
+                </label>
+                <select
+                  value={priceType}
+                  onChange={(e) => setPriceType(e.target.value)}
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="per_stay">Per Masa Inap (Flat Sekali Bayar)</option>
+                  <option value="per_night">Per Malam Inap (Dikalikan Jumlah Malam)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Deskripsi Layanan
                 </label>
                 <textarea
                   rows={3}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Deskripsi singkat..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Jelaskan detail fasilitas layanan tambahan..."
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 pt-1">
                 <input
                   type="checkbox"
-                  id="cat_active"
-                  checked={formData.is_active}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                  id="activeToggle"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
                 />
-                <label htmlFor="cat_active" className="text-sm font-medium text-slate-700">
-                  Status Aktif
+                <label htmlFor="activeToggle" className="text-xs font-bold text-slate-700 cursor-pointer">
+                  Aktif dan dapat dipilih oleh tamu saat pemesanan kamar
                 </label>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-sm font-semibold"
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-amber-600 hover:bg-amber-700 shadow-md transition"
                 >
-                  {submitting ? 'Menyimpan...' : 'Simpan'}
+                  {submitting ? 'Menyimpan...' : 'Simpan Layanan'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDelete}
+        loading={deleting}
+        type="danger"
+        title="Hapus Layanan Add-On?"
+        message={`Apakah Anda yakin ingin menghapus layanan "${extraToDelete?.name}"? Reservasi sebelumnya yang telah memesan layanan ini tetap tercatat.`}
+        confirmText="Hapus Layanan"
+        cancelText="Batal"
+      />
     </div>
   );
 }

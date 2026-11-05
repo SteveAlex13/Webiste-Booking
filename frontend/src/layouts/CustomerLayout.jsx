@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, NavLink, Outlet, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Calendar, Clock, User, LogOut, ChevronRight, Home } from 'lucide-react';
+import { Hotel, User, LogOut, ChevronRight, BedDouble, Calendar, Sparkles } from 'lucide-react';
 
 export default function CustomerLayout() {
   const { user, isAuthenticated, loading, logout } = useAuth();
@@ -10,7 +10,7 @@ export default function CustomerLayout() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-amber-600 border-t-transparent"></div>
       </div>
     );
   }
@@ -27,37 +27,47 @@ export default function CustomerLayout() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
       {/* Top Navbar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
+          <div className="flex justify-between h-20 items-center">
             <div className="flex items-center space-x-6">
-              <Link to="/" className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
-                  <Calendar className="w-5 h-5" />
+              <Link to="/" className="flex items-center space-x-3 group">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-600 to-yellow-500 flex items-center justify-center text-white shadow-md shadow-amber-500/20 group-hover:scale-105 transition transform">
+                  <Hotel className="w-5 h-5" />
                 </div>
-                <span className="text-lg font-bold text-slate-900">BookingHub</span>
+                <div>
+                  <span className="text-base font-black text-slate-900 group-hover:text-amber-600 transition block leading-tight">
+                    The Royal Nusantara
+                  </span>
+                  <span className="text-[10px] text-amber-700 font-bold uppercase tracking-wider block">
+                    Portal Reservasi Tamu
+                  </span>
+                </div>
               </Link>
-              <div className="hidden sm:flex items-center space-x-1 text-sm text-slate-400">
+
+              <div className="hidden sm:flex items-center space-x-1 text-xs text-slate-400">
                 <ChevronRight className="w-4 h-4" />
-                <span className="text-slate-600 font-medium">Customer Area</span>
+                <span className="text-slate-600 font-semibold">Tamu Terdaftar</span>
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
               <Link
                 to="/services"
-                className="hidden sm:inline-flex items-center text-xs font-semibold px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition"
+                className="hidden sm:inline-flex items-center space-x-1.5 text-xs font-bold px-3.5 py-2 bg-amber-50 text-amber-800 hover:bg-amber-100 rounded-xl transition border border-amber-200"
               >
-                + Pesan Layanan Baru
+                <BedDouble className="w-3.5 h-3.5" />
+                <span>+ Pesan Suite Baru</span>
               </Link>
+
               <div className="flex items-center space-x-3 pl-3 border-l border-slate-200">
                 <div className="text-right hidden sm:block">
-                  <p className="text-sm font-semibold text-slate-800 leading-tight">{user?.name}</p>
-                  <p className="text-xs text-slate-500">{user?.email}</p>
+                  <p className="text-xs font-bold text-slate-900 leading-tight">{user?.name}</p>
+                  <p className="text-[10px] text-slate-400">{user?.email}</p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
                   title="Keluar"
                 >
                   <LogOut className="w-4 h-4" />
@@ -67,41 +77,40 @@ export default function CustomerLayout() {
           </div>
 
           {/* Sub Navigation */}
-          <div className="flex space-x-8 border-t border-slate-100 overflow-x-auto">
+          <div className="flex space-x-8 border-t border-slate-100 overflow-x-auto text-xs font-bold">
             <NavLink
               to="/customer/dashboard"
               end
               className={({ isActive }) =>
-                `py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition ${
+                `py-3 px-1 border-b-2 whitespace-nowrap transition ${
                   isActive
-                    ? 'border-indigo-600 text-indigo-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    ? 'border-amber-600 text-amber-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                 }`
               }
             >
-              Dashboard & Booking Saya
+              Reservasi & Menginap Saya
             </NavLink>
             <NavLink
               to="/customer/profile"
               className={({ isActive }) =>
-                `py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition ${
+                `py-3 px-1 border-b-2 whitespace-nowrap transition ${
                   isActive
-                    ? 'border-indigo-600 text-indigo-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    ? 'border-amber-600 text-amber-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                 }`
               }
             >
-              Profil Saya
+              Profil Tamu
             </NavLink>
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         <Outlet />
       </main>
     </div>
   );
 }
-

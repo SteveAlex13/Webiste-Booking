@@ -10,82 +10,112 @@ export const adminService = {
     return await api.get('/admin/reports', { params });
   },
 
-  // Categories
-  async getCategories(params = {}) {
-    return await api.get('/admin/categories', { params });
+  // Hotel Profile & Settings
+  async getHotel() {
+    return await api.get('/hotel');
   },
 
-  async createCategory(data) {
-    return await api.post('/admin/categories', data);
+  async updateHotel(data) {
+    return await api.put('/admin/hotel', data);
   },
 
-  async updateCategory(id, data) {
-    return await api.put(`/admin/categories/${id}`, data);
+  // Room Types (formerly Services)
+  async getRoomTypes(params = {}) {
+    return await api.get('/admin/room-types', { params });
   },
 
-  async deleteCategory(id) {
-    return await api.delete(`/admin/categories/${id}`);
+  async createRoomType(data) {
+    return await api.post('/admin/room-types', data);
   },
 
-  // Services
+  async updateRoomType(id, data) {
+    return await api.put(`/admin/room-types/${id}`, data);
+  },
+
+  async deleteRoomType(id) {
+    return await api.delete(`/admin/room-types/${id}`);
+  },
+
+  // Aliases for Services backward compat
   async getServices(params = {}) {
-    return await api.get('/admin/services', { params });
+    return await api.get('/admin/room-types', { params });
   },
-
-  async createService(formData) {
-    return await api.post('/admin/services', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+  async createService(data) {
+    return await api.post('/admin/room-types', data);
   },
-
-  async updateService(id, formData) {
-    formData.append('_method', 'PUT');
-    return await api.post(`/admin/services/${id}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+  async updateService(id, data) {
+    return await api.put(`/admin/room-types/${id}`, data);
   },
-
   async deleteService(id) {
-    return await api.delete(`/admin/services/${id}`);
+    return await api.delete(`/admin/room-types/${id}`);
   },
 
-  // Schedules & Business Hours
-  async getBusinessHours() {
-    return await api.get('/admin/business-hours');
+  // Physical Room Units Management (Front Desk)
+  async getRooms(params = {}) {
+    return await api.get('/admin/rooms', { params });
   },
 
-  async updateBusinessHours(hours) {
-    return await api.post('/admin/business-hours', { hours });
+  async createRoom(data) {
+    return await api.post('/admin/rooms', data);
   },
 
-  async getExceptions() {
-    return await api.get('/admin/schedule-exceptions');
+  async updateRoomStatus(id, status) {
+    return await api.patch(`/admin/rooms/${id}/status`, { status });
   },
 
-  async createException(data) {
-    return await api.post('/admin/schedule-exceptions', data);
+  async deleteRoom(id) {
+    return await api.delete(`/admin/rooms/${id}`);
   },
 
-  async deleteException(id) {
-    return await api.delete(`/admin/schedule-exceptions/${id}`);
-  },
-
-  // Slots
-  async getSlots(params = {}) {
-    return await api.get('/admin/booking-slots', { params });
-  },
-
-  async generateSlots(data) {
-    return await api.post('/admin/booking-slots/generate', data);
-  },
-
-  // Bookings
+  // Hotel Bookings & Front Desk Check-in / Check-out
   async getBookings(params = {}) {
     return await api.get('/admin/bookings', { params });
   },
 
-  async updateBookingStatus(id, status, reason = '') {
-    return await api.patch(`/admin/bookings/${id}/status`, { status, reason });
+  async getBooking(id) {
+    return await api.get(`/admin/bookings/${id}`);
+  },
+
+  async getAvailableRoomsForBooking(bookingId) {
+    return await api.get(`/admin/bookings/${bookingId}/available-rooms`);
+  },
+
+  async checkInGuest(bookingId, roomId) {
+    return await api.post(`/admin/bookings/${bookingId}/check-in`, { room_id: roomId });
+  },
+
+  async checkOutGuest(bookingId) {
+    return await api.post(`/admin/bookings/${bookingId}/check-out`);
+  },
+
+  // Extra Services (Add-ons: Breakfast, Airport Pickup, etc.)
+  async getExtraServices() {
+    return await api.get('/extra-services');
+  },
+
+  async createExtraService(data) {
+    return await api.post('/admin/extra-services', data);
+  },
+
+  async updateExtraService(id, data) {
+    return await api.put(`/admin/extra-services/${id}`, data);
+  },
+
+  async deleteExtraService(id) {
+    return await api.delete(`/admin/extra-services/${id}`);
+  },
+
+  // Amenities
+  async getAmenities() {
+    return await api.get('/amenities');
+  },
+
+  async createAmenity(data) {
+    return await api.post('/admin/amenities', data);
+  },
+
+  async deleteAmenity(id) {
+    return await api.delete(`/admin/amenities/${id}`);
   },
 
   // Customers & Payments
@@ -97,4 +127,3 @@ export const adminService = {
     return await api.get('/admin/payments', { params });
   },
 };
-

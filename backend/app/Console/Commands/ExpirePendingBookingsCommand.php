@@ -3,16 +3,16 @@
 namespace App\Console\Commands;
 
 use App\Models\Booking;
-use App\Services\BookingService;
+use App\Services\HotelBookingService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 class ExpirePendingBookingsCommand extends Command
 {
     protected $signature = 'bookings:expire-pending';
-    protected $description = 'Expire pending bookings that have passed their expiration time and safely release slot capacity.';
+    protected $description = 'Expire pending bookings that have passed their expiration time and safely release room capacity.';
 
-    public function handle(BookingService $bookingService): int
+    public function handle(HotelBookingService $bookingService): int
     {
         $expiredBookings = Booking::where('status', Booking::STATUS_PENDING_PAYMENT)
             ->where('expires_at', '<=', Carbon::now())

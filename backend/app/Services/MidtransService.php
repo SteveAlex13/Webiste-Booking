@@ -36,6 +36,36 @@ class MidtransService
             return 'SIMULATED_SNAP_TOKEN_' . bin2hex(random_bytes(16));
         }
 
+        $roomTypeName = $booking->roomType ? $booking->roomType->name : 'Kamar Hotel';
+        $itemDetails = [
+            [
+                'id' => 'ROOM-' . $booking->room_type_id,
+                'price' => (int) round($booking->total_room_amount),
+                'quantity' => 1,
+                'name' => substr("{$roomTypeName} ({$booking->total_nights} mlm)", 0, 50),
+            ],
+        ];
+
+        // Add extra items
+        foreach ($booking->extraItems as $extra) {
+            $itemDetails[] = [
+                'id' => 'EXTRA-' . $extra->id,
+                'price' => (int) round($extra->subtotal),
+                'quantity' => 1,
+                'name' => substr($extra->name, 0, 50),
+            ];
+        }
+
+        // Add tax & service if present
+        if ($booking->tax_and_service_amount > 0) {
+            $itemDetails[] = [
+                'id' => 'TAX-SERVICE',
+                'price' => (int) round($booking->tax_and_service_amount),
+                'quantity' => 1,
+                'name' => 'Pajak & Biaya Layanan 10%',
+            ];
+        }
+
         $params = [
             'transaction_details' => [
                 'order_id' => $orderId,
@@ -43,17 +73,10 @@ class MidtransService
             ],
             'customer_details' => [
                 'first_name' => $booking->customer_name,
-                'email' => $booking->user->email,
+                'email' => $booking->customer_email ?? $booking->user->email,
                 'phone' => $booking->customer_phone,
             ],
-            'item_details' => [
-                [
-                    'id' => (string) $booking->service_id,
-                    'price' => (int) round($booking->service_price),
-                    'quantity' => 1,
-                    'name' => substr($booking->service_name, 0, 50),
-                ],
-            ],
+            'item_details' => $itemDetails,
             'expiry' => [
                 'start_time' => date('Y-m-d H:i:s O'),
                 'unit' => 'minute',

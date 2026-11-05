@@ -16,7 +16,7 @@ class PaymentService
 {
     public function __construct(
         protected MidtransService $midtransService,
-        protected BookingService $bookingService
+        protected HotelBookingService $bookingService
     ) {}
 
     /**

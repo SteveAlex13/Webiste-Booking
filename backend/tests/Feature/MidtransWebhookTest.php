@@ -3,10 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Booking;
-use App\Models\BookingSlot;
+use App\Models\Hotel;
 use App\Models\Payment;
-use App\Models\Service;
-use App\Models\ServiceCategory;
+use App\Models\RoomType;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,45 +21,60 @@ class MidtransWebhookTest extends TestCase
         config(['midtrans.server_key' => $serverKey]);
 
         $user = User::factory()->create(['role' => 'customer']);
-        $category = ServiceCategory::create(['name' => 'Spa', 'slug' => 'spa', 'is_active' => true]);
-        $service = Service::create([
-            'category_id' => $category->id,
-            'name' => 'Massage',
-            'slug' => 'massage',
-            'price' => 100000,
-            'duration_minutes' => 60,
-            'capacity' => 2,
-            'is_active' => true,
-        ]);
-        $slot = BookingSlot::create([
-            'service_id' => $service->id,
-            'start_at' => Carbon::tomorrow()->setTime(14, 0),
-            'end_at' => Carbon::tomorrow()->setTime(15, 0),
-            'capacity' => 2,
-            'reserved_count' => 1,
-            'is_available' => true,
+        $hotel = Hotel::create([
+            'id' => 1,
+            'name' => 'The Royal Nusantara Resort',
+            'city' => 'Bali',
+            'address' => 'Nusa Dua',
+            'phone' => '0361-123456',
+            'email' => 'info@hotel.com',
+            'star_rating' => 5,
         ]);
 
+        $roomType = RoomType::create([
+            'hotel_id' => $hotel->id,
+            'name' => 'Deluxe Suite',
+            'slug' => 'deluxe-suite',
+            'base_price_per_night' => 1000000,
+            'total_rooms' => 5,
+            'max_adults' => 2,
+            'max_children' => 1,
+            'room_size_sqm' => 45,
+            'bed_type' => 'King Bed',
+            'is_active' => true,
+        ]);
+
+        $checkIn = Carbon::tomorrow()->toDateString();
+        $checkOut = Carbon::tomorrow()->addDays(2)->toDateString();
+
         $booking = Booking::create([
-            'booking_code' => 'BK-TEST-001',
+            'hotel_id' => $hotel->id,
             'user_id' => $user->id,
-            'service_id' => $service->id,
-            'booking_slot_id' => $slot->id,
+            'room_type_id' => $roomType->id,
+            'booking_code' => 'HTL-TEST-001',
             'customer_name' => $user->name,
-            'customer_phone' => '08123',
-            'service_name' => $service->name,
-            'service_price' => 100000,
-            'total_amount' => 100000,
+            'customer_email' => $user->email,
+            'customer_phone' => '08123456789',
+            'check_in_date' => $checkIn,
+            'check_out_date' => $checkOut,
+            'total_nights' => 2,
+            'total_adults' => 2,
+            'total_children' => 0,
+            'room_price_per_night' => 1000000,
+            'total_room_amount' => 2000000,
+            'total_extras_amount' => 0,
+            'tax_and_service_amount' => 200000,
+            'total_amount' => 2200000,
             'status' => Booking::STATUS_PENDING_PAYMENT,
         ]);
 
-        $orderId = 'ORDER-TEST-001';
-        $grossAmount = '100000.00';
+        $orderId = 'HTL-ORDER-TEST-001';
+        $grossAmount = '2200000.00';
         $statusCode = '200';
         $payment = Payment::create([
             'booking_id' => $booking->id,
             'order_id' => $orderId,
-            'gross_amount' => 100000,
+            'gross_amount' => 2200000,
             'status' => Payment::STATUS_PENDING,
         ]);
 
@@ -72,8 +86,8 @@ class MidtransWebhookTest extends TestCase
             'gross_amount' => $grossAmount,
             'signature_key' => $signatureKey,
             'transaction_status' => 'settlement',
-            'payment_type' => 'bank_transfer',
-            'transaction_id' => 'midtrans-trx-123',
+            'payment_type' => 'qris',
+            'transaction_id' => 'midtrans-trx-hotel-123',
         ]);
 
         $response->assertStatus(200)
@@ -87,4 +101,3 @@ class MidtransWebhookTest extends TestCase
         $this->assertNotNull($booking->confirmed_at);
     }
 }
-

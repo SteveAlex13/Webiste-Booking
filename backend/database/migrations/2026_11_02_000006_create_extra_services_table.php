@@ -8,11 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('service_categories', function (Blueprint $table) {
+        Schema::create('extra_services', function (Blueprint $table) {
             $table->id();
-            $table->string('name', 100);
-            $table->string('slug', 120)->unique();
+            $table->string('name', 150);
             $table->text('description')->nullable();
+            $table->decimal('price', 15, 2);
+            $table->string('price_type', 30)->default('per_booking'); // per_booking, per_night, per_guest
+            $table->string('icon', 50)->default('Sparkles');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
@@ -20,7 +22,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('service_categories');
+        Schema::dropIfExists('extra_services');
     }
 };
 

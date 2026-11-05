@@ -12,28 +12,37 @@ class Booking extends Model
 {
     use HasFactory;
 
-    // Status Constants according to Section 6.1
     public const STATUS_PENDING_PAYMENT = 'PENDING_PAYMENT';
     public const STATUS_CONFIRMED = 'CONFIRMED';
-    public const STATUS_COMPLETED = 'COMPLETED';
+    public const STATUS_CHECKED_IN = 'CHECKED_IN';
+    public const STATUS_CHECKED_OUT = 'CHECKED_OUT';
     public const STATUS_CANCELLED = 'CANCELLED';
     public const STATUS_EXPIRED = 'EXPIRED';
 
     protected $fillable = [
         'booking_code',
         'user_id',
-        'service_id',
-        'booking_slot_id',
+        'room_type_id',
+        'assigned_room_id',
         'customer_name',
+        'customer_email',
         'customer_phone',
-        'service_name',
-        'service_price',
+        'check_in_date',
+        'check_out_date',
+        'total_nights',
+        'total_adults',
+        'total_children',
+        'room_price_per_night',
+        'total_room_amount',
+        'total_extras_amount',
+        'tax_and_service_amount',
         'total_amount',
-        'notes',
+        'special_requests',
         'status',
         'expires_at',
         'confirmed_at',
-        'completed_at',
+        'checked_in_at',
+        'checked_out_at',
         'cancelled_at',
         'cancellation_reason',
     ];
@@ -41,11 +50,20 @@ class Booking extends Model
     protected function casts(): array
     {
         return [
-            'service_price' => 'decimal:2',
+            'check_in_date' => 'date',
+            'check_out_date' => 'date',
+            'total_nights' => 'integer',
+            'total_adults' => 'integer',
+            'total_children' => 'integer',
+            'room_price_per_night' => 'decimal:2',
+            'total_room_amount' => 'decimal:2',
+            'total_extras_amount' => 'decimal:2',
+            'tax_and_service_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'expires_at' => 'datetime',
             'confirmed_at' => 'datetime',
-            'completed_at' => 'datetime',
+            'checked_in_at' => 'datetime',
+            'checked_out_at' => 'datetime',
             'cancelled_at' => 'datetime',
         ];
     }
@@ -55,14 +73,19 @@ class Booking extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function service(): BelongsTo
+    public function roomType(): BelongsTo
     {
-        return $this->belongsTo(Service::class);
+        return $this->belongsTo(RoomType::class);
     }
 
-    public function slot(): BelongsTo
+    public function assignedRoom(): BelongsTo
     {
-        return $this->belongsTo(BookingSlot::class, 'booking_slot_id');
+        return $this->belongsTo(Room::class, 'assigned_room_id');
+    }
+
+    public function extraItems(): HasMany
+    {
+        return $this->hasMany(BookingExtraItem::class);
     }
 
     public function payments(): HasMany
@@ -78,6 +101,11 @@ class Booking extends Model
     public function statusHistories(): HasMany
     {
         return $this->hasMany(BookingStatusHistory::class);
+    }
+
+    public function review(): HasOne
+    {
+        return $this->hasOne(Review::class);
     }
 
     public function isPendingPayment(): bool
@@ -100,4 +128,3 @@ class Booking extends Model
         return $this->status === self::STATUS_EXPIRED;
     }
 }
-

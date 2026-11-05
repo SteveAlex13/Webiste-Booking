@@ -1,6 +1,10 @@
 import api from './api';
 
 export const bookingService = {
+  async calculatePrice(data) {
+    return await api.post('/bookings/calculate-price', data);
+  },
+
   async createBooking(data) {
     return await api.post('/bookings', data);
   },
@@ -17,4 +21,3 @@ export const bookingService = {
     return await api.post(`/bookings/${id}/cancel`, { reason });
   },
 };
-

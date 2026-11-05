@@ -1,34 +1,64 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { serviceService } from '../../services/serviceService';
 import { formatRupiah } from '../../utils/format';
 import {
+  Hotel,
   Calendar,
-  Clock,
-  ShieldCheck,
-  CreditCard,
+  Users,
+  Star,
+  MapPin,
   Sparkles,
   ArrowRight,
+  ShieldCheck,
   CheckCircle2,
-  Users,
+  Coffee,
+  Waves,
+  Wifi,
+  Tv,
+  Car,
+  Utensils,
+  Award,
 } from 'lucide-react';
 
 export default function HomePage() {
-  const [categories, setCategories] = useState([]);
-  const [services, setServices] = useState([]);
+  const navigate = useNavigate();
+  const [hotel, setHotel] = useState(null);
+  const [roomTypes, setRoomTypes] = useState([]);
+  const [extraServices, setExtraServices] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Search Bar State
+  const today = new Date().toISOString().split('T')[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const [checkIn, setCheckIn] = useState(today);
+  const [checkOut, setCheckOut] = useState(tomorrow);
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catRes, svcRes] = await Promise.all([
-          serviceService.getCategories(),
-          serviceService.getServices(),
+        const [hotelRes, roomRes, extrasRes] = await Promise.all([
+          serviceService.getHotel(),
+          serviceService.getRoomTypes(),
+          serviceService.getExtraServices(),
         ]);
-        if (catRes.data) setCategories(catRes.data);
-        if (svcRes.data) setServices(svcRes.data);
+        if (hotelRes.data) setHotel(hotelRes.data);
+        if (roomRes.data) {
+          const typesList = Array.isArray(roomRes.data)
+            ? roomRes.data
+            : roomRes.data?.room_types || roomRes.data?.data || [];
+          setRoomTypes(typesList);
+        }
+        if (extrasRes.data) {
+          const extrasList = Array.isArray(extrasRes.data)
+            ? extrasRes.data
+            : extrasRes.data?.data || [];
+          setExtraServices(extrasList);
+        }
       } catch (err) {
-        console.error('Error fetching home data:', err);
+        console.error('Error fetching hotel data:', err);
       } finally {
         setLoading(false);
       }
@@ -37,141 +67,291 @@ export default function HomePage() {
     fetchData();
   }, []);
 
+  const handleSearch = (e) => {
+    e.preventDefault();
+    navigate(
+      `/services?check_in=${checkIn}&check_out=${checkOut}&adults=${adults}&children=${children}`
+    );
+  };
+
+  const safeRoomTypes = Array.isArray(roomTypes)
+    ? roomTypes
+    : roomTypes?.room_types || roomTypes?.data || [];
+
   return (
-    <div className="space-y-20 pb-20">
+    <div className="space-y-20 pb-24">
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-indigo-50/70 via-white to-slate-50 pt-16 pb-24 border-b border-slate-200/60">
+      <section className="relative overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-amber-950 text-white pt-16 pb-32">
+        {/* Background glow overlay */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent pointer-events-none"></div>
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center max-w-3xl mx-auto space-y-6">
-            <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-indigo-100/80 text-indigo-800 text-xs font-semibold">
-              <Sparkles className="w-4 h-4 text-indigo-600" />
-              <span>Sistem Pemesanan Layanan Online Terpadu</span>
+          <div className="text-center max-w-3xl mx-auto space-y-5">
+            <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30 backdrop-blur-md">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>Satu-satunya Luxury 5-Star Beachfront Resort di Nusa Dua</span>
             </div>
-            <h1 className="text-4xl sm:text-6xl font-extrabold text-slate-900 tracking-tight leading-tight">
-              Pesan Jadwal Layanan Tanpa Antri & Bayar Mudah
+
+            <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight text-white">
+              Ketenangan Sempurna & Kemewahan Tak Tertandingi
             </h1>
-            <p className="text-lg text-slate-600 leading-relaxed">
-              Pilih layanan favorit, tentukan waktu luang Anda dengan sistem ketersediaan jadwal real-time, dan selesaikan pembayaran aman via Midtrans Snap.
+
+            <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto">
+              {hotel?.description ||
+                'Nikmati pengalaman menginap berkelas dunia dengan panorama samudera lepas, layanan butler privat 24 jam, dan suite arsitektur nusantara modern.'}
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Link
-                to="/services"
-                className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-2xl shadow-lg shadow-indigo-200 transition transform hover:-translate-y-0.5"
-              >
-                <span>Lihat Semua Layanan</span>
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-              <Link
-                to="/customer/dashboard"
-                className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-8 py-4 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-2xl border border-slate-200 shadow-sm transition"
-              >
-                <span>Cek Booking Saya</span>
-              </Link>
+
+            {/* Quick Badges */}
+            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-amber-200/90 pt-2">
+              <span className="flex items-center space-x-1.5">
+                <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                <span className="font-bold">5.0 Star Resort</span>
+              </span>
+              <span>•</span>
+              <span className="flex items-center space-x-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Garansi Ketersediaan Real-Time</span>
+              </span>
+              <span>•</span>
+              <span className="flex items-center space-x-1.5">
+                <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                <span>Instant QRIS Midtrans</span>
+              </span>
             </div>
           </div>
 
-          {/* Value Highlights */}
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex items-start space-x-4">
-              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
-                <ShieldCheck className="w-6 h-6" />
-              </div>
+          {/* Hotel Booking Search Bar Card */}
+          <div className="mt-12 max-w-5xl mx-auto bg-white rounded-3xl p-6 sm:p-8 text-slate-800 shadow-2xl border border-slate-100">
+            <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">Anti Double-Booking</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Penguncian kapasitas berbasis database atomik menjamin jadwal yang Anda pilih tidak tertumpuk pelanggan lain.
-                </p>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+                  Check-In
+                </label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-amber-600 absolute left-3.5 top-3.5 pointer-events-none" />
+                  <input
+                    type="date"
+                    min={today}
+                    value={checkIn}
+                    onChange={(e) => {
+                      setCheckIn(e.target.value);
+                      if (e.target.value >= checkOut) {
+                        const nextD = new Date(e.target.value);
+                        nextD.setDate(nextD.getDate() + 1);
+                        setCheckOut(nextD.toISOString().split('T')[0]);
+                      }
+                    }}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex items-start space-x-4">
-              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-                <CreditCard className="w-6 h-6" />
-              </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-base">Midtrans Snap Payment</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Mendukung QRIS, GoPay, ShopeePay, Virtual Account (BCA, Mandiri, BNI, BRI), dan kartu kredit.
-                </p>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+                  Check-Out
+                </label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-amber-600 absolute left-3.5 top-3.5 pointer-events-none" />
+                  <input
+                    type="date"
+                    min={checkIn}
+                    value={checkOut}
+                    onChange={(e) => setCheckOut(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex items-start space-x-4">
-              <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-                <Clock className="w-6 h-6" />
-              </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-base">Konfirmasi Instan</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Status otomatis terkonfirmasi secara real-time via webhook begitu pembayaran berhasil diverifikasi.
-                </p>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+                  Jumlah Tamu
+                </label>
+                <div className="relative">
+                  <Users className="w-4 h-4 text-amber-600 absolute left-3.5 top-3.5 pointer-events-none" />
+                  <select
+                    value={`${adults}-${children}`}
+                    onChange={(e) => {
+                      const [a, c] = e.target.value.split('-').map(Number);
+                      setAdults(a);
+                      setChildren(c);
+                    }}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="1-0">1 Dewasa</option>
+                    <option value="2-0">2 Dewasa</option>
+                    <option value="2-1">2 Dewasa, 1 Anak</option>
+                    <option value="2-2">2 Dewasa, 2 Anak</option>
+                    <option value="3-0">3 Dewasa</option>
+                    <option value="4-2">4 Dewasa, 2 Anak (Suite / Villa)</option>
+                  </select>
+                </div>
               </div>
-            </div>
+
+              <div>
+                <button
+                  type="submit"
+                  className="w-full py-3.5 px-6 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-black rounded-2xl shadow-lg shadow-amber-600/30 transition transform hover:-translate-y-0.5 text-xs flex items-center justify-center space-x-2"
+                >
+                  <span>Cari Ketersediaan</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </section>
 
-      {/* Featured Services Section */}
+      {/* Hotel Highlights / Value Proposition */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4">
+              <Waves className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-base">Beachfront & Private Pool</h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              Akses langsung ke pasir putih Nusa Dua dan kolam renang infinity dengan pemandangan matahari terbenam.
+            </p>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4">
+              <Utensils className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-base">Kuliner Nusantara & Dunia</h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              Restoran bintang 5 dengan santapan otentik Bali, sarapan apung privat (floating breakfast), dan rooftop lounge.
+            </p>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-base">Pasti Bebas Double-Booking</h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              Mesin ketersediaan dengan date-range overlap lock mengunci kamar pilihan Anda seketika saat reservasi.
+            </p>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4">
+              <Award className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-base">Layanan Butler 24 Jam</h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              Tim concierge profesional siap memenuhi segala preferensi Anda mulai dari penjemputan Alphard hingga tur privat.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Suites & Rooms Catalog */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4">
           <div>
-            <span className="text-xs font-bold text-indigo-600 tracking-wider uppercase">Pilihan Terbaik</span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">Layanan Populer</h2>
+            <span className="text-xs font-bold text-amber-600 uppercase tracking-widest">
+              Koleksi Kamar & Suite
+            </span>
+            <h2 className="text-3xl font-black text-slate-900 mt-1">Pilihan Ruang Menginap Eksklusif</h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-xl">
+              Setiap kamar dirancang dengan interior kayu jati mewah, balkon privat, linen katun Mesir 400-thread, dan teknologi mutakhir.
+            </p>
           </div>
           <Link
             to="/services"
-            className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center space-x-1 mt-2 md:mt-0"
+            className="inline-flex items-center space-x-2 text-xs font-bold text-amber-700 hover:text-amber-800 self-start sm:self-auto group"
           >
-            <span>Semua Layanan</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>Lihat Semua Tipe ({safeRoomTypes.length})</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition" />
           </Link>
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-2xl p-6 border border-slate-200 animate-pulse h-64"></div>
-            ))}
+          <div className="py-20 text-center text-slate-400">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-600 border-t-transparent mx-auto mb-2"></div>
+            Memuat katalog kamar...
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {services.slice(0, 6).map((service) => (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {safeRoomTypes.slice(0, 3).map((room) => (
               <div
-                key={service.id}
-                className="bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition flex flex-col overflow-hidden group"
+                key={room.id}
+                className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group"
               >
-                <div className="p-6 flex-1 flex flex-col justify-between">
+                {/* Image / Banner */}
+                <div className="relative h-56 bg-slate-900 overflow-hidden">
+                  <img
+                    src={room.image_url}
+                    alt={room.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                    onError={(e) => {
+                      e.target.src =
+                        'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80';
+                    }}
+                  />
+                  <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold text-white flex items-center space-x-1.5">
+                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    <span>Luxury Suite</span>
+                  </div>
+                  <div className="absolute bottom-4 right-4 bg-amber-500/90 text-white text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm">
+                    {room.size_sqm} m²
+                  </div>
+                </div>
+
+                {/* Details */}
+                <div className="p-6 space-y-4 flex-1 flex flex-col justify-between">
                   <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg">
-                        {service.category?.name || 'Umum'}
-                      </span>
-                      <div className="flex items-center text-xs text-slate-500 space-x-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>{service.duration_minutes} Menit</span>
-                      </div>
-                    </div>
-                    <h3 className="font-bold text-lg text-slate-900 group-hover:text-indigo-600 transition">
-                      {service.name}
+                    <h3 className="text-xl font-black text-slate-900 group-hover:text-amber-600 transition">
+                      {room.name}
                     </h3>
-                    <p className="text-sm text-slate-500 mt-2 line-clamp-2">
-                      {service.description || 'Layanan berkualitas tinggi dengan pelayanan memuaskan.'}
+                    <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                      {room.description}
                     </p>
+
+                    <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                      <span className="bg-slate-100 px-2.5 py-1 rounded-lg font-medium">
+                        🛏️ {room.bed_type}
+                      </span>
+                      <span className="bg-slate-100 px-2.5 py-1 rounded-lg font-medium">
+                        👥 Max {room.max_occupancy} Tamu
+                      </span>
+                    </div>
+
+                    {/* Amenities Icons */}
+                    {room.amenities && room.amenities.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-1.5">
+                        {room.amenities.slice(0, 4).map((amenity) => (
+                          <span
+                            key={amenity.id}
+                            className="text-[10px] bg-amber-50 text-amber-800 font-semibold px-2 py-0.5 rounded-md"
+                          >
+                            ✓ {amenity.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  {/* Price and CTA */}
+                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                     <div>
-                      <span className="text-xs text-slate-400 block">Tarif Layanan</span>
-                      <span className="text-lg font-extrabold text-indigo-600">
-                        {formatRupiah(service.price)}
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                        Mulai dari
                       </span>
+                      <span className="text-lg font-black text-slate-900">
+                        {formatRupiah(room.base_price_per_night)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-semibold"> / malam</span>
                     </div>
+
                     <Link
-                      to={`/book/${service.id}`}
-                      className="inline-flex items-center space-x-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition"
+                      to={`/book/${room.id}?check_in=${checkIn}&check_out=${checkOut}&adults=${adults}&children=${children}`}
+                      className="px-4 py-2.5 bg-slate-900 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-sm transition"
                     >
-                      <span>Pilih Jadwal</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      Pesan Suite
                     </Link>
                   </div>
                 </div>
@@ -181,50 +361,75 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* How it Works */}
-      <section className="bg-slate-900 text-white py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-14">
-            <h2 className="text-3xl font-bold">Cara Mudah Melakukan Pemesanan</h2>
-            <p className="text-slate-400 text-sm mt-2">Hanya butuh 4 langkah mudah untuk mengamankan slot layanan Anda.</p>
+      {/* Extra Services & Experiences */}
+      {extraServices.length > 0 && (
+        <section className="bg-amber-50/50 py-16 border-y border-amber-100/80">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+            <div className="text-center max-w-xl mx-auto space-y-2">
+              <span className="text-xs font-bold text-amber-700 uppercase tracking-widest">
+                Pengalaman Eksklusif
+              </span>
+              <h2 className="text-3xl font-black text-slate-900">Layanan Tambahan Mewah</h2>
+              <p className="text-xs sm:text-sm text-slate-600">
+                Lengkapi liburan Anda dengan add-on premium yang dapat langsung Anda pilih saat booking.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {extraServices.map((extra) => (
+                <div
+                  key={extra.id}
+                  className="bg-white p-6 rounded-2xl border border-amber-200/60 shadow-sm flex items-start space-x-4"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0 font-bold">
+                    <Coffee className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">{extra.name}</h4>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">{extra.description}</p>
+                    <span className="text-xs font-black text-amber-700 mt-2 block">
+                      +{formatRupiah(extra.price)} ({extra.price_type === 'per_stay' ? 'per masa inap' : 'per malam'})
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Guest Reviews & Hospitality Assurance */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="bg-gradient-to-r from-slate-900 via-amber-950 to-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-xl flex flex-col lg:flex-row items-center justify-between gap-8">
+          <div className="space-y-4 max-w-xl">
+            <div className="flex text-amber-400 space-x-1">
+              <Star className="w-5 h-5 fill-amber-400" />
+              <Star className="w-5 h-5 fill-amber-400" />
+              <Star className="w-5 h-5 fill-amber-400" />
+              <Star className="w-5 h-5 fill-amber-400" />
+              <Star className="w-5 h-5 fill-amber-400" />
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-black">
+              "Pengalaman menginap paling berkesan dan mewah di Bali."
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Proses reservasi sangat cepat dan nyaman. Langsung scan QRIS dari layar ponsel, konfirmasi kamar seketika, dan saat tiba kamar sudah dipersiapkan dengan wangi aromaterapi khas Bali.
+            </p>
+            <div className="pt-2 text-xs font-semibold text-amber-300">
+              — Budi Santoso, Jakarta (Tamu Presidential Suite)
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 relative">
-            <div className="text-center space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-600 flex items-center justify-center text-lg font-bold">
-                1
-              </div>
-              <h3 className="font-bold text-base">Pilih Layanan</h3>
-              <p className="text-xs text-slate-400">Temukan layanan yang Anda butuhkan dengan detail harga dan durasi transparan.</p>
-            </div>
-
-            <div className="text-center space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-600 flex items-center justify-center text-lg font-bold">
-                2
-              </div>
-              <h3 className="font-bold text-base">Pilih Tanggal & Slot</h3>
-              <p className="text-xs text-slate-400">Lihat ketersediaan jam operasional langsung, bebas dari overbooking.</p>
-            </div>
-
-            <div className="text-center space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-600 flex items-center justify-center text-lg font-bold">
-                3
-              </div>
-              <h3 className="font-bold text-base">Bayar via Midtrans</h3>
-              <p className="text-xs text-slate-400">Pilih channel pembayaran favorit (QRIS, VA Bank, E-Wallet) dalam 15 menit.</p>
-            </div>
-
-            <div className="text-center space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-600 flex items-center justify-center text-lg font-bold">
-                4
-              </div>
-              <h3 className="font-bold text-base">Konfirmasi Otomatis</h3>
-              <p className="text-xs text-slate-400">Jadwal langsung terkonfirmasi otomatis dan simpan tiket booking Anda.</p>
-            </div>
+          <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+            <Link
+              to="/services"
+              className="px-8 py-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-2xl shadow-lg transition text-center text-xs"
+            >
+              Cek Semua Kamar Tersedia
+            </Link>
           </div>
         </div>
       </section>
     </div>
   );
 }
-

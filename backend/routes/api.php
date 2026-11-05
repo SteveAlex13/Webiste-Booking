@@ -1,13 +1,15 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AdminDashboardController;
+use App\Http\Controllers\Api\V1\AmenityController;
 use App\Http\Controllers\Api\V1\AuthController;
-use App\Http\Controllers\Api\V1\AvailabilityController;
-use App\Http\Controllers\Api\V1\BookingController;
-use App\Http\Controllers\Api\V1\CategoryController;
+use App\Http\Controllers\Api\V1\HotelBookingController;
+use App\Http\Controllers\Api\V1\HotelController;
 use App\Http\Controllers\Api\V1\MidtransWebhookController;
 use App\Http\Controllers\Api\V1\PaymentController;
-use App\Http\Controllers\Api\V1\ServiceController;
+use App\Http\Controllers\Api\V1\ReviewController;
+use App\Http\Controllers\Api\V1\RoomTypeController;
+use App\Http\Controllers\Api\V1\RoomUnitController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -15,13 +17,20 @@ Route::prefix('v1')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
 
-    // 2. Public Service & Category Browsing
-    Route::get('/categories', [CategoryController::class, 'index']);
-    Route::get('/services', [ServiceController::class, 'index']);
-    Route::get('/services/{id}', [ServiceController::class, 'show']);
-    Route::get('/services/{id}/availability', [AvailabilityController::class, 'check']);
+    // 2. Hotel & Room Catalog (Public)
+    Route::get('/hotel', [HotelController::class, 'show']);
+    Route::get('/extra-services', [HotelController::class, 'extraServices']);
+    Route::get('/amenities', [AmenityController::class, 'index']);
+    Route::get('/room-types', [RoomTypeController::class, 'index']);
+    Route::get('/room-types/{id}', [RoomTypeController::class, 'show']);
+    Route::get('/room-types/{id}/reviews', [ReviewController::class, 'index']);
+    Route::post('/bookings/calculate-price', [HotelBookingController::class, 'calculatePrice']);
 
-    // 3. Webhooks (Midtrans) - Not protected by sanctum
+    // Backward compatibility aliases for existing frontend services
+    Route::get('/services', [RoomTypeController::class, 'index']);
+    Route::get('/services/{id}', [RoomTypeController::class, 'show']);
+
+    // 3. Webhooks (Midtrans)
     Route::post('/webhooks/midtrans', [MidtransWebhookController::class, 'handle']);
 
     // 4. Authenticated Routes (Customer + Admin)
@@ -30,11 +39,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/user', [AuthController::class, 'user']);
         Route::put('/user/profile', [AuthController::class, 'updateProfile']);
 
-        // Customer Booking
-        Route::post('/bookings', [BookingController::class, 'store']);
-        Route::get('/bookings', [BookingController::class, 'index']);
-        Route::get('/bookings/{id}', [BookingController::class, 'show']);
-        Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
+        // Customer Hotel Booking
+        Route::post('/bookings', [HotelBookingController::class, 'store']);
+        Route::get('/bookings', [HotelBookingController::class, 'index']);
+        Route::get('/bookings/{id}', [HotelBookingController::class, 'show']);
+        Route::post('/bookings/{id}/cancel', [HotelBookingController::class, 'cancel']);
+
+        // Customer Reviews
+        Route::post('/reviews', [ReviewController::class, 'store']);
 
         // Payments
         Route::post('/payments/checkout', [PaymentController::class, 'checkout']);
@@ -47,35 +59,42 @@ Route::prefix('v1')->group(function () {
             Route::get('/dashboard', [AdminDashboardController::class, 'dashboard']);
             Route::get('/reports', [AdminDashboardController::class, 'reports']);
 
-            // Category Management
-            Route::get('/categories', [CategoryController::class, 'adminIndex']);
-            Route::post('/categories', [CategoryController::class, 'store']);
-            Route::put('/categories/{id}', [CategoryController::class, 'update']);
-            Route::delete('/categories/{id}', [CategoryController::class, 'destroy']);
+            // Hotel Profile & Add-ons
+            Route::put('/hotel', [HotelController::class, 'update']);
+            Route::post('/extra-services', [HotelController::class, 'storeExtraService']);
+            Route::put('/extra-services/{id}', [HotelController::class, 'updateExtraService']);
+            Route::delete('/extra-services/{id}', [HotelController::class, 'destroyExtraService']);
 
-            // Service Management
-            Route::get('/services', [ServiceController::class, 'adminIndex']);
-            Route::post('/services', [ServiceController::class, 'store']);
-            Route::put('/services/{id}', [ServiceController::class, 'update']);
-            Route::delete('/services/{id}', [ServiceController::class, 'destroy']);
+            // Amenities
+            Route::post('/amenities', [AmenityController::class, 'store']);
+            Route::delete('/amenities/{id}', [AmenityController::class, 'destroy']);
 
-            // Schedule Management
-            Route::get('/business-hours', [AdminDashboardController::class, 'businessHours']);
-            Route::post('/business-hours', [AdminDashboardController::class, 'updateBusinessHours']);
-            Route::get('/schedule-exceptions', [AdminDashboardController::class, 'scheduleExceptions']);
-            Route::post('/schedule-exceptions', [AdminDashboardController::class, 'storeScheduleException']);
-            Route::delete('/schedule-exceptions/{id}', [AdminDashboardController::class, 'destroyScheduleException']);
+            // Room Types Management
+            Route::get('/room-types', [RoomTypeController::class, 'adminIndex']);
+            Route::post('/room-types', [RoomTypeController::class, 'store']);
+            Route::put('/room-types/{id}', [RoomTypeController::class, 'update']);
+            Route::delete('/room-types/{id}', [RoomTypeController::class, 'destroy']);
 
-            // Slots Management
-            Route::get('/booking-slots', [AdminDashboardController::class, 'bookingSlots']);
-            Route::post('/booking-slots/generate', [AdminDashboardController::class, 'generateSlots']);
+            // Compatibility with /admin/services
+            Route::get('/services', [RoomTypeController::class, 'adminIndex']);
+            Route::post('/services', [RoomTypeController::class, 'store']);
+            Route::put('/services/{id}', [RoomTypeController::class, 'update']);
+            Route::delete('/services/{id}', [RoomTypeController::class, 'destroy']);
 
-            // Bookings Management
-            Route::get('/bookings', [BookingController::class, 'adminIndex']);
-            Route::get('/bookings/{id}', [BookingController::class, 'show']);
-            Route::patch('/bookings/{id}/status', [BookingController::class, 'updateStatus']);
+            // Physical Room Units Management
+            Route::get('/rooms', [RoomUnitController::class, 'index']);
+            Route::post('/rooms', [RoomUnitController::class, 'store']);
+            Route::patch('/rooms/{id}/status', [RoomUnitController::class, 'updateStatus']);
+            Route::delete('/rooms/{id}', [RoomUnitController::class, 'destroy']);
 
-            // Customers & Payments List
+            // Hotel Front Desk & Bookings Management
+            Route::get('/bookings', [HotelBookingController::class, 'adminIndex']);
+            Route::get('/bookings/{id}', [HotelBookingController::class, 'show']);
+            Route::get('/bookings/{id}/available-rooms', [HotelBookingController::class, 'availableRoomsForBooking']);
+            Route::post('/bookings/{id}/check-in', [HotelBookingController::class, 'checkIn']);
+            Route::post('/bookings/{id}/check-out', [HotelBookingController::class, 'checkOut']);
+
+            // Customers & Payments
             Route::get('/customers', [AdminDashboardController::class, 'customers']);
             Route::get('/payments', [PaymentController::class, 'adminIndex']);
         });

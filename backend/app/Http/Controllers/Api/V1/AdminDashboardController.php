@@ -4,40 +4,58 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
-use App\Models\BookingSlot;
-use App\Models\BusinessHour;
+use App\Models\Hotel;
 use App\Models\Payment;
-use App\Models\ScheduleException;
-use App\Models\Service;
+use App\Models\Room;
+use App\Models\RoomType;
 use App\Models\User;
-use App\Services\AvailabilityService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class AdminDashboardController extends Controller
 {
-    public function __construct(
-        protected AvailabilityService $availabilityService
-    ) {}
-
     /**
-     * Dashboard statistics and summary.
+     * Hotel Dashboard Statistics and KPI metrics.
      */
     public function dashboard(): JsonResponse
     {
-        $totalBookings = Booking::count();
+        $today = Carbon::today()->toDateString();
+
+        $totalRooms = Room::count();
+        $occupiedRooms = Room::where('status', 'occupied')->count();
+        $occupancyRate = $totalRooms > 0 ? round(($occupiedRooms / $totalRooms) * 100, 1) : 0;
+
         $totalCustomers = User::where('role', 'customer')->count();
-        $totalActiveServices = Service::where('is_active', true)->count();
         $totalRevenue = Payment::where('status', Payment::STATUS_PAID)->sum('gross_amount');
 
+        // Hotel Operations Today
+        $expectedArrivalsToday = Booking::where('check_in_date', $today)
+            ->whereIn('status', [Booking::STATUS_CONFIRMED])
+            ->count();
+
+        $expectedDeparturesToday = Booking::where('check_out_date', $today)
+            ->where('status', Booking::STATUS_CHECKED_IN)
+            ->count();
+
+        $currentlyCheckedIn = Booking::where('status', Booking::STATUS_CHECKED_IN)->count();
+
+        // Status breakdown
         $pendingPayments = Booking::where('status', Booking::STATUS_PENDING_PAYMENT)->count();
         $confirmedBookings = Booking::where('status', Booking::STATUS_CONFIRMED)->count();
-        $completedBookings = Booking::where('status', Booking::STATUS_COMPLETED)->count();
+        $checkedInCount = $currentlyCheckedIn;
+        $checkedOutCount = Booking::where('status', Booking::STATUS_CHECKED_OUT)->count();
         $cancelledOrExpired = Booking::whereIn('status', [Booking::STATUS_CANCELLED, Booking::STATUS_EXPIRED])->count();
 
-        // 7-day revenue and booking trend
+        // Room status distribution
+        $roomStatuses = [
+            'available' => Room::where('status', 'available')->count(),
+            'occupied' => $occupiedRooms,
+            'cleaning' => Room::where('status', 'cleaning')->count(),
+            'maintenance' => Room::where('status', 'maintenance')->count(),
+        ];
+
+        // 7-day revenue trend
         $sevenDaysAgo = Carbon::today()->subDays(6);
         $revenueTrend = [];
         for ($i = 0; $i < 7; $i++) {
@@ -56,7 +74,7 @@ class AdminDashboardController extends Controller
             ];
         }
 
-        $recentBookings = Booking::with(['service', 'slot', 'latestPayment'])
+        $recentBookings = Booking::with(['roomType', 'assignedRoom', 'latestPayment'])
             ->orderBy('id', 'desc')
             ->limit(5)
             ->get();
@@ -69,14 +87,20 @@ class AdminDashboardController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'total_bookings' => $totalBookings,
+                'total_rooms' => $totalRooms,
+                'occupied_rooms' => $occupiedRooms,
+                'occupancy_rate' => $occupancyRate,
                 'total_customers' => $totalCustomers,
-                'total_services' => $totalActiveServices,
                 'total_revenue' => (float) $totalRevenue,
+                'expected_arrivals_today' => $expectedArrivalsToday,
+                'expected_departures_today' => $expectedDeparturesToday,
+                'currently_checked_in' => $currentlyCheckedIn,
+                'room_statuses' => $roomStatuses,
                 'status_breakdown' => [
                     'pending_payment' => $pendingPayments,
                     'confirmed' => $confirmedBookings,
-                    'completed' => $completedBookings,
+                    'checked_in' => $checkedInCount,
+                    'checked_out' => $checkedOutCount,
                     'cancelled_or_expired' => $cancelledOrExpired,
                 ],
                 'revenue_trend' => $revenueTrend,
@@ -87,156 +111,63 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * Get business hours list.
+     * Reports and Analytics.
      */
-    public function businessHours(): JsonResponse
+    public function reports(Request $request): JsonResponse
     {
-        $hours = BusinessHour::orderBy('day_of_week')->get();
+        $startDate = $request->input('start_date', Carbon::today()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', Carbon::today()->toDateString());
 
-        return response()->json([
-            'success' => true,
-            'data' => $hours,
-        ]);
-    }
-
-    /**
-     * Update business hours.
-     */
-    public function updateBusinessHours(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'hours' => 'required|array',
-            'hours.*.day_of_week' => 'required|integer|between:0,6',
-            'hours.*.open_time' => 'nullable|string',
-            'hours.*.close_time' => 'nullable|string',
-            'hours.*.is_closed' => 'required|boolean',
+        $bookingsQuery = Booking::whereBetween('created_at', [
+            Carbon::parse($startDate)->startOfDay(),
+            Carbon::parse($endDate)->endOfDay(),
         ]);
 
-        foreach ($validated['hours'] as $hour) {
-            BusinessHour::updateOrCreate(
-                ['day_of_week' => $hour['day_of_week']],
-                [
-                    'open_time' => $hour['is_closed'] ? null : $hour['open_time'],
-                    'close_time' => $hour['is_closed'] ? null : $hour['close_time'],
-                    'is_closed' => $hour['is_closed'],
-                ]
-            );
+        if ($request->filled('room_type_id')) {
+            $bookingsQuery->where('room_type_id', $request->room_type_id);
         }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Jam operasional berhasil disimpan.',
-            'data' => BusinessHour::orderBy('day_of_week')->get(),
-        ]);
-    }
-
-    /**
-     * List schedule exceptions (holidays, special closures).
-     */
-    public function scheduleExceptions(): JsonResponse
-    {
-        $exceptions = ScheduleException::orderBy('exception_date', 'desc')->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $exceptions,
-        ]);
-    }
-
-    /**
-     * Store a schedule exception.
-     */
-    public function storeScheduleException(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'exception_date' => 'required|date',
-            'start_time' => 'nullable|string',
-            'end_time' => 'nullable|string',
-            'is_closed' => 'required|boolean',
-            'description' => 'nullable|string|max:255',
-        ]);
-
-        $exception = ScheduleException::create($validated);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Pengecualian jadwal berhasil ditambahkan.',
-            'data' => $exception,
-        ], 201);
-    }
-
-    /**
-     * Delete schedule exception.
-     */
-    public function destroyScheduleException(int $id): JsonResponse
-    {
-        ScheduleException::findOrFail($id)->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Pengecualian jadwal berhasil dihapus.',
-        ]);
-    }
-
-    /**
-     * Get booking slots for admin view.
-     */
-    public function bookingSlots(Request $request): JsonResponse
-    {
-        $query = BookingSlot::with('service');
-
-        if ($request->filled('service_id')) {
-            $query->where('service_id', $request->service_id);
+        if ($request->filled('status')) {
+            $bookingsQuery->where('status', $request->status);
         }
 
-        if ($request->filled('date')) {
-            $query->whereDate('start_at', $request->date);
-        }
+        $totalPeriodBookings = (clone $bookingsQuery)->count();
 
-        $slots = $query->orderBy('start_at', 'asc')->paginate(20);
+        $revenuePeriod = Payment::where('status', Payment::STATUS_PAID)
+            ->whereBetween('paid_at', [
+                Carbon::parse($startDate)->startOfDay(),
+                Carbon::parse($endDate)->endOfDay(),
+            ])
+            ->sum('gross_amount');
 
-        return response()->json([
-            'success' => true,
-            'data' => $slots,
-        ]);
-    }
+        // Top booked room types
+        $topRoomTypes = RoomType::withCount(['bookings' => function ($q) use ($startDate, $endDate) {
+            $q->whereBetween('created_at', [
+                Carbon::parse($startDate)->startOfDay(),
+                Carbon::parse($endDate)->endOfDay(),
+            ]);
+        }])
+        ->orderBy('bookings_count', 'desc')
+        ->limit(5)
+        ->get();
 
-    /**
-     * Generate slots for a service and date range.
-     */
-    public function generateSlots(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'service_id' => 'required|exists:services,id',
-            'start_date' => 'required|date|after_or_equal:today',
-            'end_date' => 'required|date|after_or_equal:start_date',
-        ]);
-
-        $service = Service::findOrFail($validated['service_id']);
-        $start = Carbon::parse($validated['start_date']);
-        $end = Carbon::parse($validated['end_date']);
-
-        $generatedDays = 0;
-        for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
-            $dayOfWeek = $date->dayOfWeek;
-            $businessHour = BusinessHour::where('day_of_week', $dayOfWeek)->first();
-            $exception = ScheduleException::where('exception_date', $date->toDateString())->first();
-
-            if (($businessHour && $businessHour->is_closed) && ! $exception) {
-                continue;
-            }
-
-            if ($exception && $exception->is_closed) {
-                continue;
-            }
-
-            $this->availabilityService->ensureSlotsExistForDate($service, $date, $businessHour, $exception);
-            $generatedDays++;
-        }
+        $bookingsList = (clone $bookingsQuery)
+            ->with(['roomType', 'user', 'latestPayment', 'assignedRoom'])
+            ->orderBy('id', 'desc')
+            ->limit(100)
+            ->get();
 
         return response()->json([
             'success' => true,
-            'message' => "Slot jadwal berhasil digenerate untuk {$generatedDays} hari operasional.",
+            'data' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'total_bookings' => $totalPeriodBookings,
+                'total_revenue' => (float) $revenuePeriod,
+                'top_services' => $topRoomTypes, // compatibility with frontend table
+                'top_room_types' => $topRoomTypes,
+                'bookings' => $bookingsList,
+            ],
         ]);
     }
 
@@ -251,8 +182,8 @@ class AdminDashboardController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%");
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%");
             });
         }
 
@@ -263,67 +194,4 @@ class AdminDashboardController extends Controller
             'data' => $customers,
         ]);
     }
-
-    /**
-     * Analytics Reports.
-     */
-    public function reports(Request $request): JsonResponse
-    {
-        $startDate = $request->input('start_date', Carbon::today()->startOfMonth()->toDateString());
-        $endDate = $request->input('end_date', Carbon::today()->toDateString());
-
-        // Total bookings in period
-        $bookingsQuery = Booking::whereBetween('created_at', [
-            Carbon::parse($startDate)->startOfDay(),
-            Carbon::parse($endDate)->endOfDay(),
-        ]);
-
-        if ($request->filled('service_id')) {
-            $bookingsQuery->where('service_id', $request->service_id);
-        }
-
-        if ($request->filled('status')) {
-            $bookingsQuery->where('status', $request->status);
-        }
-
-        $totalPeriodBookings = (clone $bookingsQuery)->count();
-
-        // Revenue in period
-        $revenuePeriod = Payment::where('status', Payment::STATUS_PAID)
-            ->whereBetween('paid_at', [
-                Carbon::parse($startDate)->startOfDay(),
-                Carbon::parse($endDate)->endOfDay(),
-            ])
-            ->sum('gross_amount');
-
-        // Top ordered services
-        $topServices = Service::withCount(['bookings' => function ($q) use ($startDate, $endDate) {
-            $q->whereBetween('created_at', [
-                Carbon::parse($startDate)->startOfDay(),
-                Carbon::parse($endDate)->endOfDay(),
-            ]);
-        }])
-        ->orderBy('bookings_count', 'desc')
-        ->limit(5)
-        ->get();
-
-        $bookingsList = (clone $bookingsQuery)
-            ->with(['service', 'user', 'latestPayment'])
-            ->orderBy('id', 'desc')
-            ->limit(100)
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'start_date' => $startDate,
-                'end_date' => $endDate,
-                'total_bookings' => $totalPeriodBookings,
-                'total_revenue' => (float) $revenuePeriod,
-                'top_services' => $topServices,
-                'bookings' => $bookingsList,
-            ],
-        ]);
-    }
 }
-

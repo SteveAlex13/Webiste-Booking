@@ -52,6 +52,18 @@ export const BOOKING_STATUS_CONFIG = {
     text: 'text-emerald-700',
     border: 'border-emerald-200',
   },
+  CHECKED_IN: {
+    label: 'Checked In',
+    bg: 'bg-indigo-50',
+    text: 'text-indigo-700',
+    border: 'border-indigo-200',
+  },
+  CHECKED_OUT: {
+    label: 'Checked Out',
+    bg: 'bg-teal-50',
+    text: 'text-teal-700',
+    border: 'border-teal-200',
+  },
   COMPLETED: {
     label: 'Selesai',
     bg: 'bg-blue-50',
@@ -70,6 +82,12 @@ export const BOOKING_STATUS_CONFIG = {
     text: 'text-slate-600',
     border: 'border-slate-300',
   },
+  NO_SHOW: {
+    label: 'No Show',
+    bg: 'bg-gray-100',
+    text: 'text-gray-600',
+    border: 'border-gray-300',
+  },
 };
 
 export const PAYMENT_STATUS_CONFIG = {
@@ -80,4 +98,3 @@ export const PAYMENT_STATUS_CONFIG = {
   CANCELLED: { label: 'Dibatalkan', bg: 'bg-rose-50', text: 'text-rose-700' },
   REFUNDED: { label: 'Refund', bg: 'bg-purple-50', text: 'text-purple-700' },
 };
-

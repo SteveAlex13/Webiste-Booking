@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { serviceService } from '../../services/serviceService';
 import { bookingService } from '../../services/bookingService';
@@ -9,428 +9,657 @@ import { formatRupiah, formatDate } from '../../utils/format';
 import { loadSnapScript, openSnapModal } from '../../utils/midtrans';
 import {
   Calendar,
-  Clock,
+  Users,
   CheckCircle2,
   AlertCircle,
   CreditCard,
   ArrowRight,
   ShieldCheck,
   ChevronLeft,
-  Sun,
-  Sunset,
   Sparkles,
+  Star,
+  Coffee,
+  Check,
+  Plus,
+  Minus,
+  DoorOpen,
 } from 'lucide-react';
 
 export default function BookingFlowPage() {
   const { serviceId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const toast = useToast();
 
-  const [service, setService] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [slots, setSlots] = useState([]);
-  const [selectedSlot, setSelectedSlot] = useState(null);
-  const [notes, setNotes] = useState('');
-  const [loadingService, setLoadingService] = useState(true);
-  const [loadingSlots, setLoadingSlots] = useState(false);
+  const today = new Date().toISOString().split('T')[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+  const [roomType, setRoomType] = useState(null);
+  const [extraServices, setExtraServices] = useState([]);
+  const [loadingRoom, setLoadingRoom] = useState(true);
+
+  // Form State
+  const [checkIn, setCheckIn] = useState(searchParams.get('check_in') || today);
+  const [checkOut, setCheckOut] = useState(searchParams.get('check_out') || tomorrow);
+  const [adults, setAdults] = useState(Number(searchParams.get('adults') || 2));
+  const [children, setChildren] = useState(Number(searchParams.get('children') || 0));
+
+  // Customer Contact Info
+  const [customerName, setCustomerName] = useState(user?.name || '');
+  const [customerEmail, setCustomerEmail] = useState(user?.email || '');
+  const [customerPhone, setCustomerPhone] = useState(user?.phone || '');
+  const [specialRequests, setSpecialRequests] = useState('');
+
+  // Selected Extras: { [extraId]: quantity }
+  const [selectedExtras, setSelectedExtras] = useState({});
+
+  // Price calculation from backend
+  const [priceCalculation, setPriceCalculation] = useState(null);
+  const [calculatingPrice, setCalculatingPrice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Generate Quick Dates (Next 5 days)
-  const quickDates = Array.from({ length: 5 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
-    const label =
-      i === 0
-        ? 'Hari Ini'
-        : i === 1
-        ? 'Besok'
-        : d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-    return { dateStr, label };
-  });
-
-  // 1. Fetch Service Info
+  // Fetch Room Type & Extra Services
   useEffect(() => {
-    const fetchService = async () => {
+    const fetchData = async () => {
       try {
-        const res = await serviceService.getService(serviceId);
-        if (res.data) setService(res.data);
+        const [roomRes, extrasRes] = await Promise.all([
+          serviceService.getRoomType(serviceId),
+          serviceService.getExtraServices(),
+        ]);
+        if (roomRes.data) setRoomType(roomRes.data);
+        if (extrasRes.data) setExtraServices(extrasRes.data);
       } catch (err) {
-        toast.error('Layanan tidak ditemukan.');
+        toast.error('Gagal memuat detail tipe kamar.');
       } finally {
-        setLoadingService(false);
+        setLoadingRoom(false);
       }
     };
-    fetchService();
+    fetchData();
   }, [serviceId]);
 
-  // 2. Fetch Availability Slots for Date
+  // Recalculate price when dates or extras change
   useEffect(() => {
-    if (!serviceId || !selectedDate) return;
+    if (!roomType || !checkIn || !checkOut || checkIn >= checkOut) return;
 
-    const fetchSlots = async () => {
-      setLoadingSlots(true);
-      setSelectedSlot(null);
+    const calculate = async () => {
+      setCalculatingPrice(true);
       try {
-        const res = await serviceService.getAvailability(serviceId, selectedDate);
-        if (res.data?.slots) {
-          setSlots(res.data.slots);
+        const extrasPayload = Object.entries(selectedExtras)
+          .filter(([_, qty]) => qty > 0)
+          .map(([id, quantity]) => ({ id: Number(id), quantity }));
+
+        const res = await serviceService.calculatePrice({
+          room_type_id: roomType.id,
+          check_in_date: checkIn,
+          check_out_date: checkOut,
+          extras: extrasPayload,
+        });
+
+        if (res.data) {
+          setPriceCalculation(res.data);
         }
       } catch (err) {
-        toast.error('Gagal memuat jadwal ketersediaan.');
+        console.error('Calculate price error:', err);
       } finally {
-        setLoadingSlots(false);
+        setCalculatingPrice(false);
       }
     };
 
-    fetchSlots();
-  }, [serviceId, selectedDate]);
+    const timer = setTimeout(calculate, 300);
+    return () => clearTimeout(timer);
+  }, [roomType, checkIn, checkOut, selectedExtras]);
 
-  // Group slots by time of day
-  const morningSlots = slots.filter((s) => {
-    const hour = parseInt(s.start_time_formatted.split(':')[0], 10);
-    return hour < 12;
-  });
-  const afternoonSlots = slots.filter((s) => {
-    const hour = parseInt(s.start_time_formatted.split(':')[0], 10);
-    return hour >= 12 && hour < 15;
-  });
-  const eveningSlots = slots.filter((s) => {
-    const hour = parseInt(s.start_time_formatted.split(':')[0], 10);
-    return hour >= 15;
-  });
+  // Handle Extras Toggle / Quantity
+  const handleExtraToggle = (extraId) => {
+    setSelectedExtras((prev) => {
+      const current = prev[extraId] || 0;
+      if (current > 0) {
+        const next = { ...prev };
+        delete next[extraId];
+        return next;
+      } else {
+        return { ...prev, [extraId]: 1 };
+      }
+    });
+  };
 
-  // 3. Handle Submit Booking & Open Midtrans Snap
-  const handleBookingAndPayment = async () => {
+  const handleExtraQuantity = (extraId, delta) => {
+    setSelectedExtras((prev) => {
+      const current = prev[extraId] || 0;
+      const updated = Math.max(1, current + delta);
+      return { ...prev, [extraId]: updated };
+    });
+  };
+
+  // Submit Booking & Midtrans Checkout
+  const handleBookingSubmit = async (e) => {
+    e.preventDefault();
+
     if (!isAuthenticated) {
-      toast.info('Silakan masuk terlebih dahulu untuk melanjutkan pemesanan.');
-      navigate('/login', { state: { from: { pathname: `/book/${serviceId}` } } });
+      toast.info('Silakan login terlebih dahulu untuk menyelesaikan reservasi.');
+      navigate(`/login?redirect=/book/${serviceId}`);
       return;
     }
 
-    if (!selectedSlot) {
-      toast.warning('Silakan pilih salah satu jadwal sesi terlebih dahulu.');
+    if (checkIn >= checkOut) {
+      toast.error('Tanggal check-out harus setelah tanggal check-in.');
+      return;
+    }
+
+    if (priceCalculation && !priceCalculation.is_available) {
+      toast.error('Kamar ini penuh pada rentang tanggal yang dipilih. Silakan pilih tanggal lain.');
       return;
     }
 
     setSubmitting(true);
-
     try {
-      // Step A: Create booking in backend
-      const bookingRes = await bookingService.createBooking({
-        service_id: service.id,
-        booking_slot_id: selectedSlot.id,
-        notes: notes,
-      });
+      const extrasPayload = Object.entries(selectedExtras)
+        .filter(([_, qty]) => qty > 0)
+        .map(([id, quantity]) => ({ id: Number(id), quantity }));
 
+      const bookingPayload = {
+        room_type_id: roomType.id,
+        check_in_date: checkIn,
+        check_out_date: checkOut,
+        customer_name: customerName,
+        customer_email: customerEmail,
+        customer_phone: customerPhone,
+        total_adults: adults,
+        total_children: children,
+        special_requests: specialRequests,
+        extras: extrasPayload,
+      };
+
+      // 1. Create Booking
+      const bookingRes = await bookingService.createBooking(bookingPayload);
       const newBooking = bookingRes.data;
-      toast.success('Reservasi berhasil dibuat! Membuka Midtrans...');
 
-      // Step B: Request Midtrans Snap Token
+      toast.success(`Reservasi ${newBooking.booking_code} berhasil dibuat! Membuka Midtrans...`);
+
+      // 2. Trigger Midtrans Snap Checkout
       const checkoutRes = await paymentService.checkout(newBooking.id);
       const { snap_token, client_key, payment_id } = checkoutRes.data;
 
-      // Step C: Load Snap script and trigger payment modal
+      // 3. Load & Open Snap
       const isProduction = import.meta.env.VITE_MIDTRANS_IS_PRODUCTION === 'true';
       await loadSnapScript(client_key || import.meta.env.VITE_MIDTRANS_CLIENT_KEY, isProduction);
 
+      // Fallback check
       if (snap_token.startsWith('SIMULATED_') || snap_token.startsWith('SANDBOX_FALLBACK_')) {
-        navigate(`/payment-result/${payment_id}?status=simulated`);
+        navigate(`/payment-result/${payment_id}`);
         return;
       }
 
       openSnapModal(snap_token, {
-        onSuccess: function () {
-          navigate(`/payment-result/${payment_id}?status=success`);
+        onSuccess: (result) => {
+          toast.success('Pembayaran sukses terverifikasi!');
+          navigate(`/payment-result/${payment_id}`);
         },
-        onPending: function () {
-          navigate(`/payment-result/${payment_id}?status=pending`);
+        onPending: (result) => {
+          toast.info('Menunggu penyelesaian pembayaran QRIS.');
+          navigate('/customer/dashboard');
         },
-        onError: function () {
-          navigate(`/payment-result/${payment_id}?status=error`);
+        onError: (result) => {
+          toast.error('Pembayaran gagal atau dibatalkan.');
+          navigate('/customer/dashboard');
         },
-        onClose: function () {
-          navigate(`/customer/dashboard`);
+        onClose: () => {
+          navigate('/customer/dashboard');
         },
       });
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message || 'Gagal memproses pemesanan.');
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Terjadi kesalahan saat memproses booking.');
+    } finally {
       setSubmitting(false);
     }
   };
 
-  if (loadingService) {
+  if (loadingRoom) {
     return (
-      <div className="max-w-4xl mx-auto py-20 px-4 text-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-2 border-indigo-600 border-t-transparent mx-auto"></div>
-        <p className="text-slate-500 text-sm mt-3">Memuat detail layanan...</p>
+      <div className="py-32 text-center text-slate-400">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-amber-600 border-t-transparent mx-auto mb-3"></div>
+        Menyiapkan detail suite hotel...
       </div>
     );
   }
 
-  if (!service) {
+  if (!roomType) {
     return (
-      <div className="max-w-4xl mx-auto py-20 px-4 text-center">
-        <p className="text-rose-500 font-semibold">Layanan tidak ditemukan.</p>
+      <div className="max-w-xl mx-auto py-20 text-center space-y-4">
+        <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
+        <h2 className="text-xl font-bold text-slate-800">Tipe Kamar Tidak Ditemukan</h2>
+        <Link to="/services" className="text-amber-600 font-bold hover:underline">
+          Kembali ke Koleksi Kamar
+        </Link>
       </div>
     );
   }
+
+  const nights = priceCalculation?.nights || 1;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      {/* Back button & Breadcrumb */}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+      {/* Back button */}
       <div>
-        <button
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center text-xs font-semibold text-slate-500 hover:text-indigo-600 mb-3 transition"
+        <Link
+          to="/services"
+          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-amber-700 transition"
         >
-          <ChevronLeft className="w-4 h-4 mr-1" />
-          <span>Kembali ke Katalog</span>
-        </button>
-
-        {/* Step Indicator Header */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <span className="text-xs font-bold text-indigo-600 tracking-wider uppercase">
-              Pemesanan Layanan
-            </span>
-            <h1 className="text-2xl font-extrabold text-slate-900 mt-0.5">{service.name}</h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Kategori: <strong>{service.category?.name || 'Umum'}</strong> • Durasi:{' '}
-              <strong>{service.duration_minutes} Menit</strong> • Kapasitas: <strong>{service.capacity} Orang</strong>
-            </p>
-          </div>
-          <div className="text-left sm:text-right">
-            <span className="text-xs text-slate-400 block font-semibold">Tarif Layanan</span>
-            <span className="text-2xl font-extrabold text-indigo-600">{formatRupiah(service.price)}</span>
-          </div>
-        </div>
+          <ChevronLeft className="w-4 h-4" />
+          <span>Kembali ke Katalog Kamar</span>
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* Left Column: Date and Slot selection */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Step 1: Select Date */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-indigo-600" />
-              <h2 className="text-base font-bold text-slate-900">1. Tentukan Tanggal Kunjungan</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left 2 Cols: Booking Form & Add-ons */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Room Header Card */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm flex flex-col sm:flex-row gap-6 items-center">
+            <img
+              src={roomType.image_url}
+              alt={roomType.name}
+              className="w-full sm:w-44 h-36 rounded-2xl object-cover bg-slate-900 shadow-sm"
+              onError={(e) => {
+                e.target.src =
+                  'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80';
+              }}
+            />
+            <div className="flex-1 space-y-2 text-center sm:text-left">
+              <div className="flex items-center justify-center sm:justify-start space-x-1.5 text-amber-500 text-xs font-bold">
+                <Star className="w-4 h-4 fill-amber-400" />
+                <span>Luxury 5-Star Suite</span>
+              </div>
+              <h1 className="text-2xl font-black text-slate-900">{roomType.name}</h1>
+              <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                {roomType.description}
+              </p>
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1 text-xs text-slate-700">
+                <span className="bg-slate-100 px-3 py-1 rounded-lg font-semibold">
+                  🛏️ {roomType.bed_type}
+                </span>
+                <span className="bg-slate-100 px-3 py-1 rounded-lg font-semibold">
+                  👥 Max {roomType.max_occupancy} Tamu
+                </span>
+                <span className="bg-slate-100 px-3 py-1 rounded-lg font-semibold">
+                  📐 {roomType.size_sqm} m²
+                </span>
+              </div>
             </div>
+          </div>
 
-            {/* Quick date pills */}
-            <div className="flex flex-wrap gap-2">
-              {quickDates.map((qd) => (
-                <button
-                  key={qd.dateStr}
-                  type="button"
-                  onClick={() => setSelectedDate(qd.dateStr)}
-                  className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex flex-col items-center justify-center min-w-[90px] ${
-                    selectedDate === qd.dateStr
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+          {/* Form Section */}
+          <form onSubmit={handleBookingSubmit} id="hotel-booking-form" className="space-y-8">
+            {/* Step 1: Stay Dates */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-5">
+              <div className="flex items-center space-x-3 border-b border-slate-100 pb-4">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white font-black flex items-center justify-center text-xs">
+                  1
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">Tanggal Menginap & Tamu</h3>
+                  <p className="text-xs text-slate-400">Tentukan periode reservasi Anda</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Tanggal Check-In *
+                  </label>
+                  <input
+                    type="date"
+                    min={today}
+                    value={checkIn}
+                    onChange={(e) => {
+                      setCheckIn(e.target.value);
+                      if (e.target.value >= checkOut) {
+                        const nextD = new Date(e.target.value);
+                        nextD.setDate(nextD.getDate() + 1);
+                        setCheckOut(nextD.toISOString().split('T')[0]);
+                      }
+                    }}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Tanggal Check-Out *
+                  </label>
+                  <input
+                    type="date"
+                    min={checkIn}
+                    value={checkOut}
+                    onChange={(e) => setCheckOut(e.target.value)}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Dewasa (Adults)
+                  </label>
+                  <select
+                    value={adults}
+                    onChange={(e) => setAdults(Number(e.target.value))}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold cursor-pointer"
+                  >
+                    <option value={1}>1 Orang</option>
+                    <option value={2}>2 Orang</option>
+                    <option value={3}>3 Orang</option>
+                    <option value={4}>4 Orang</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Anak-anak (Children)
+                  </label>
+                  <select
+                    value={children}
+                    onChange={(e) => setChildren(Number(e.target.value))}
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold cursor-pointer"
+                  >
+                    <option value={0}>0 Anak</option>
+                    <option value={1}>1 Anak</option>
+                    <option value={2}>2 Anak</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Availability Notice */}
+              {priceCalculation && (
+                <div
+                  className={`p-3.5 rounded-2xl border text-xs flex items-center space-x-3 ${
+                    priceCalculation.is_available
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border-rose-200'
                   }`}
                 >
-                  <span>{qd.label}</span>
-                  <span
-                    className={`text-[10px] mt-0.5 font-normal ${
-                      selectedDate === qd.dateStr ? 'text-indigo-100' : 'text-slate-400'
-                    }`}
-                  >
-                    {qd.dateStr.slice(5)}
-                  </span>
-                </button>
-              ))}
+                  {priceCalculation.is_available ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold">Kamar Siap & Tersedia!</span>
+                        <span className="block text-[11px] text-emerald-700">
+                          Tersedia {priceCalculation.available_rooms_count} unit untuk periode {nights} malam ({formatDate(checkIn)} - {formatDate(checkOut)}).
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold">Kamar Penuh pada Tanggal Ini</span>
+                        <span className="block text-[11px] text-rose-700">
+                          Silakan pilih rentang tanggal lain untuk melanjutkan reservasi.
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="pt-2 flex items-center space-x-3 text-xs text-slate-500">
-              <span>Atau pilih tanggal lain:</span>
-              <input
-                type="date"
-                min={new Date().toISOString().split('T')[0]}
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
+            {/* Step 2: Guest Details */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-5">
+              <div className="flex items-center space-x-3 border-b border-slate-100 pb-4">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white font-black flex items-center justify-center text-xs">
+                  2
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">Informasi Kontak Tamu</h3>
+                  <p className="text-xs text-slate-400">Konfirmasi reservasi dan tiket akan dikirimkan ke email ini</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Nama Lengkap Tamu *
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Nama sesuai KTP / Paspor"
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Nomor WhatsApp / HP *
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="081234567890"
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Alamat Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder="alamat@email.com"
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Permintaan Khusus (Opsional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={specialRequests}
+                    onChange={(e) => setSpecialRequests(e.target.value)}
+                    placeholder="Contoh: Permintaan lantai atas, ranjang bayi (baby cot), or early check-in jika memungkinkan."
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Step 2: Pick Time Slot */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center space-x-2">
-                <Clock className="w-5 h-5 text-indigo-600" />
-                <h2 className="text-base font-bold text-slate-900">2. Pilih Sesi Jam Tersedia</h2>
-              </div>
-              <span className="text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full">
-                {slots.filter((s) => s.is_available).length} Slot Tersedia
-              </span>
-            </div>
-
-            {loadingSlots ? (
-              <div className="py-12 text-center text-slate-400 text-sm">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent mx-auto mb-2"></div>
-                Memeriksa ketersediaan jadwal...
-              </div>
-            ) : slots.length === 0 ? (
-              <div className="py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
-                <p className="text-slate-700 text-sm font-bold">Tidak ada sesi jadwal operasional pada tanggal ini.</p>
-                <p className="text-xs text-slate-400">Silakan pilih tanggal lain di atas.</p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Morning Slots */}
-                {morningSlots.length > 0 && (
-                  <div className="space-y-2.5">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
-                      <Sun className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Pagi (09:00 - 12:00)</span>
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {morningSlots.map((slot) => renderSlotButton(slot, selectedSlot, setSelectedSlot))}
-                    </div>
+            {/* Step 3: Add-on Experiences & Services */}
+            {extraServices.length > 0 && (
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-5">
+                <div className="flex items-center space-x-3 border-b border-slate-100 pb-4">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white font-black flex items-center justify-center text-xs">
+                    3
                   </div>
-                )}
-
-                {/* Afternoon Slots */}
-                {afternoonSlots.length > 0 && (
-                  <div className="space-y-2.5">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
-                      <Sun className="w-3.5 h-3.5 text-orange-500" />
-                      <span>Siang (12:00 - 15:00)</span>
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {afternoonSlots.map((slot) => renderSlotButton(slot, selectedSlot, setSelectedSlot))}
-                    </div>
+                  <div>
+                    <h3 className="font-black text-slate-900 text-base">Layanan Tambahan Mewah (Add-Ons)</h3>
+                    <p className="text-xs text-slate-400">Pilih pengalaman ekstra untuk menyempurnakan masa inap Anda</p>
                   </div>
-                )}
+                </div>
 
-                {/* Evening Slots */}
-                {eveningSlots.length > 0 && (
-                  <div className="space-y-2.5">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
-                      <Sunset className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>Sore (15:00 - 18:00)</span>
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {eveningSlots.map((slot) => renderSlotButton(slot, selectedSlot, setSelectedSlot))}
-                    </div>
-                  </div>
-                )}
+                <div className="space-y-3">
+                  {extraServices.map((extra) => {
+                    const isSelected = !!selectedExtras[extra.id];
+                    const qty = selectedExtras[extra.id] || 1;
+
+                    return (
+                      <div
+                        key={extra.id}
+                        className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                          isSelected
+                            ? 'border-amber-500 bg-amber-50/50 ring-1 ring-amber-500/20'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-start space-x-3.5">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleExtraToggle(extra.id)}
+                            className="mt-1 w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300 cursor-pointer"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-900 text-xs sm:text-sm">
+                              {extra.name}
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5 max-w-md">
+                              {extra.description}
+                            </p>
+                            <span className="text-xs font-black text-amber-700 mt-1 block">
+                              +{formatRupiah(extra.price)}{' '}
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                ({extra.price_type === 'per_stay' ? 'per masa inap' : 'per malam'})
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <div className="flex items-center space-x-2 self-end sm:self-center pl-7 sm:pl-0">
+                            <span className="text-xs font-semibold text-slate-600">Jumlah:</span>
+                            <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-white">
+                              <button
+                                type="button"
+                                onClick={() => handleExtraQuantity(extra.id, -1)}
+                                className="p-1.5 text-slate-600 hover:bg-slate-100"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="px-3 text-xs font-bold text-slate-900">{qty}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleExtraQuantity(extra.id, 1)}
+                                className="p-1.5 text-slate-600 hover:bg-slate-100"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
-          </div>
-
-          {/* Step 3: Optional Notes */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-            <h2 className="text-base font-bold text-slate-900">3. Catatan Khusus untuk Kami (Opsional)</h2>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contoh: Permintaan terapis tertentu / permintaan ruangan khusus..."
-              className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
-            />
-          </div>
+          </form>
         </div>
 
-        {/* Right Column: Order Summary & Checkout Action */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6 sticky top-24">
-          <div className="pb-3 border-b border-slate-100">
-            <span className="text-xs font-bold text-indigo-600 tracking-wider uppercase">Langkah Terakhir</span>
-            <h2 className="text-base font-extrabold text-slate-900 mt-0.5">Ringkasan Pemesanan</h2>
-          </div>
+        {/* Right Col: Price Breakdown & Instant Checkout */}
+        <div className="space-y-6">
+          <div className="sticky top-24 bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-xl space-y-6">
+            <h3 className="font-black text-slate-900 text-lg border-b border-slate-100 pb-3">
+              Ringkasan Reservasi
+            </h3>
 
-          <div className="space-y-3.5 text-xs sm:text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Layanan:</span>
-              <span className="font-bold text-slate-800 text-right">{service.name}</span>
+            {/* Dates summary */}
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between text-slate-600">
+                <span>Check-In:</span>
+                <span className="font-bold text-slate-900">{formatDate(checkIn)} (14:00)</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Check-Out:</span>
+                <span className="font-bold text-slate-900">{formatDate(checkOut)} (12:00)</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Durasi:</span>
+                <span className="font-bold text-amber-700">{nights} Malam</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Tamu:</span>
+                <span className="font-bold text-slate-900">
+                  {adults} Dewasa{children > 0 ? `, ${children} Anak` : ''}
+                </span>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Durasi:</span>
-              <span className="font-semibold text-slate-800">{service.duration_minutes} Menit</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Tanggal:</span>
-              <span className="font-semibold text-slate-800">{selectedDate}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Waktu Sesi:</span>
-              <span className="font-bold text-slate-900">
-                {selectedSlot
-                  ? `${selectedSlot.start_time_formatted} - ${selectedSlot.end_time_formatted}`
-                  : 'Belum dipilih'}
-              </span>
-            </div>
-          </div>
 
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-700">Total Tagihan:</span>
-            <span className="text-2xl font-extrabold text-indigo-600">
-              {formatRupiah(service.price)}
-            </span>
-          </div>
+            {/* Cost Details */}
+            <div className="pt-4 border-t border-slate-100 space-y-2.5 text-xs">
+              <div className="flex justify-between text-slate-600">
+                <span>Biaya Kamar ({nights} malam):</span>
+                <span className="font-bold text-slate-900">
+                  {formatRupiah(priceCalculation?.room_cost?.total_room_amount || roomType.base_price_per_night * nights)}
+                </span>
+              </div>
 
-          <div className="p-3.5 bg-indigo-50/80 rounded-2xl border border-indigo-100 flex items-start space-x-2.5 text-xs text-indigo-900">
-            <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5 text-indigo-600" />
-            <span className="leading-relaxed">
-              Jadwal dijamin aman dari double-booking dengan sistem kunci atomik kami.
-            </span>
-          </div>
+              {priceCalculation?.extras_total > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Layanan Tambahan:</span>
+                  <span className="font-bold text-slate-900">
+                    {formatRupiah(priceCalculation.extras_total)}
+                  </span>
+                </div>
+              )}
 
-          <button
-            type="button"
-            disabled={!selectedSlot || submitting}
-            onClick={handleBookingAndPayment}
-            className="w-full py-4 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 transition transform hover:-translate-y-0.5 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:shadow-none disabled:transform-none text-sm"
-          >
-            {submitting ? (
-              <span className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></span>
-            ) : (
-              <>
-                <CreditCard className="w-5 h-5" />
-                <span>Lanjut Bayar via Midtrans Snap</span>
-              </>
-            )}
-          </button>
+              <div className="flex justify-between text-slate-600">
+                <span>Subtotal:</span>
+                <span className="font-bold text-slate-900">
+                  {formatRupiah(priceCalculation?.subtotal || roomType.base_price_per_night * nights)}
+                </span>
+              </div>
+
+              <div className="flex justify-between text-slate-600">
+                <span>Pajak & Layanan Hotel (10%):</span>
+                <span className="font-bold text-slate-900">
+                  {formatRupiah(priceCalculation?.tax_and_service || (roomType.base_price_per_night * nights * 0.1))}
+                </span>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-between items-baseline">
+                <div>
+                  <span className="text-xs font-black text-slate-900 uppercase tracking-wider block">
+                    Total Pembayaran
+                  </span>
+                  <span className="text-[10px] text-slate-400">Termasuk pajak 10%</span>
+                </div>
+                <span className="text-2xl font-black text-amber-700">
+                  {formatRupiah(priceCalculation?.grand_total || (roomType.base_price_per_night * nights * 1.1))}
+                </span>
+              </div>
+            </div>
+
+            {/* Midtrans Snap Guarantee */}
+            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200/80 text-[11px] text-amber-900 space-y-1">
+              <div className="flex items-center space-x-1.5 font-bold">
+                <CreditCard className="w-3.5 h-3.5 text-amber-700" />
+                <span>Midtrans Snap Instant QRIS</span>
+              </div>
+              <p className="text-[10px] text-amber-800 leading-relaxed">
+                Kamar langsung dikunci 15 menit. Anda dapat membayar langsung dengan scan QRIS Gopay, BCA, Mandiri, ShopeePay atau Virtual Account.
+              </p>
+            </div>
+
+            {/* Checkout Action Button */}
+            <button
+              type="submit"
+              form="hotel-booking-form"
+              disabled={submitting || (priceCalculation && !priceCalculation.is_available)}
+              className="w-full py-4 px-6 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-black rounded-2xl shadow-lg shadow-amber-600/30 transition transform hover:-translate-y-0.5 text-xs flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? (
+                <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+              ) : (
+                <>
+                  <span>Bayar Sekarang via QRIS</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function renderSlotButton(slot, selectedSlot, setSelectedSlot) {
-  const isSelected = selectedSlot?.id === slot.id;
-  const isFullOrPast = !slot.is_available;
-
-  return (
-    <button
-      key={slot.id}
-      type="button"
-      disabled={isFullOrPast}
-      onClick={() => setSelectedSlot(slot)}
-      className={`p-3.5 rounded-2xl border text-left transition transform duration-150 flex flex-col justify-between ${
-        isSelected
-          ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-600/30 scale-[1.02] shadow-sm'
-          : isFullOrPast
-          ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
-          : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50/70 text-slate-800 hover:scale-[1.01]'
-      }`}
-    >
-      <div className="font-bold text-sm">
-        {slot.start_time_formatted} - {slot.end_time_formatted}
-      </div>
-      <div className="mt-2 text-[11px]">
-        {slot.is_past ? (
-          <span className="text-slate-400">Sudah lewat</span>
-        ) : slot.available_spots <= 0 ? (
-          <span className="text-rose-500 font-bold">Penuh</span>
-        ) : (
-          <span className="text-emerald-600 font-bold">
-            Sisa {slot.available_spots} slot
-          </span>
-        )}
-      </div>
-    </button>
   );
 }
