@@ -71,6 +71,18 @@ export default function AdminDashboardPage() {
     recent_payments = [],
   } = data || {};
 
+  const revenueTrend = Array.isArray(data?.revenue_trend)
+    ? data.revenue_trend
+    : Array.isArray(revenue_trend)
+    ? revenue_trend
+    : [];
+
+  const recentBookings = Array.isArray(data?.recent_bookings)
+    ? data.recent_bookings
+    : Array.isArray(recent_bookings)
+    ? recent_bookings
+    : [];
+
   return (
     <div className="space-y-8">
       {/* Top Banner */}
